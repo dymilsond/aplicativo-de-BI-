@@ -322,7 +322,7 @@ let mesEscolhido = null;   // { ano, mes, rotulo } ou null
 let evoPontos = [];
 let evoParcial = null;
 let zoomAtual = null;
-let topoAtual = null;
+let faixaAtual = null;   // {piso, teto} do eixo Y em curso
 let zoomAnim = 0;
 
 /** Janela de índices que a câmera deve enquadrar. */
@@ -343,29 +343,66 @@ function janelaAlvo() {
   return { ini: a, fim: b };
 }
 
-/** Teto do eixo Y para a janela — é o zoom vertical. */
-function tetoDe(jan) {
+/** Passo "redondo" (1, 2 ou 5 vezes potência de 10) para a amplitude dada. */
+function passoBonito(amplitude) {
+  const p = Math.pow(10, Math.floor(Math.log10(Math.abs(amplitude) || 1)));
+  const n = (amplitude || 1) / p;
+  return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * p;
+}
+
+/**  Faixa do eixo Y — este é o zoom vertical, e é ele que faltava.
+ *
+ *   Sem aproximação o eixo começa em ZERO, sempre. Cortar a base exagera a
+ *   variação e é o truque mais velho do gráfico enganoso: uma oscilação de
+ *   2% vira um precipício. Não é negociável no estado geral da tela.
+ *
+ *   Aproximando é outra conversa: o usuário pediu para chegar perto de sete
+ *   meses, e chegar perto *é* deixar de olhar os R$ 0 que ninguém faturou.
+ *   Com piso em zero, 252 mil e 386 mil viram dois pontos quase colados num
+ *   terço superior do gráfico — some justamente a diferença que motivou o
+ *   clique. Por isso o corte da base só existe com o zoom ligado, e vem com
+ *   a marca de quebra no eixo para ninguém ler a inclinação como absoluta.
+ */
+function faixaDe(jan) {
   const a = Math.max(0, Math.floor(jan.ini));
   const b = Math.min(evoPontos.length - 1, Math.ceil(jan.fim));
-  const base = (ZOOM.ligado && ZOOM.escala) ? evoPontos.slice(a, b + 1) : evoPontos;
-  const max = Math.max(1, ...(base.length ? base : evoPontos).map((p) => p.valor));
-  const passo = Math.pow(10, Math.floor(Math.log10(max)));
-  return Math.ceil(max / passo) * passo;
+  const dentro = evoPontos.slice(a, b + 1);
+  const usa = dentro.length ? dentro : evoPontos;
+  const max = Math.max(1, ...usa.map((x) => x.valor));
+
+  const aproximando = ZOOM.ligado && ZOOM.escala && !!mesEscolhido
+                   && dentro.length > 0 && dentro.length < evoPontos.length;
+
+  if (!aproximando) {
+    const passo = Math.pow(10, Math.floor(Math.log10(max)));
+    return { piso: 0, teto: Math.ceil(max / passo) * passo };
+  }
+
+  const min = Math.min(...usa.map((x) => x.valor));
+  //  Folga: um quarto da variação de cada lado, com piso de 4% do maior
+  //  valor para o caso de a janela ser praticamente plana (senão o eixo
+  //  colapsaria num fio e o ruído viraria montanha).
+  const folga = Math.max((max - min) * 0.25, max * 0.04);
+  const passo = passoBonito((max + folga - Math.max(0, min - folga)) / 4);
+  const teto = Math.ceil((max + folga) / passo) * passo;
+  const piso = Math.max(0, Math.floor(Math.max(0, min - folga) / passo) * passo);
+  return { piso: piso >= teto ? 0 : piso, teto };
 }
 
 function animarZoom() {
   cancelAnimationFrame(zoomAnim);
   const alvo = janelaAlvo();
-  const teto = tetoDe(alvo);
+  const fx = faixaDe(alvo);
   const de = zoomAtual || alvo;
-  const tetoDeAntes = topoAtual == null ? teto : topoAtual;
+  const fxDe = faixaAtual || fx;
 
   const quieto = Math.abs(de.ini - alvo.ini) < 0.01
               && Math.abs(de.fim - alvo.fim) < 0.01
-              && Math.abs(tetoDeAntes - teto) < 0.01;
+              && Math.abs(fxDe.teto - fx.teto) < 0.01
+              && Math.abs(fxDe.piso - fx.piso) < 0.01;
   if (SEM_ANIM || !ZOOM.ms || quieto) {
-    zoomAtual = alvo; topoAtual = teto;
-    pintarEvolucao(alvo, teto);
+    zoomAtual = alvo; faixaAtual = fx;
+    pintarEvolucao(alvo, fx);
     return;
   }
 
@@ -374,8 +411,8 @@ function animarZoom() {
     const t = Math.min(1, (agora - t0) / ZOOM.ms);
     const e = 1 - Math.pow(1 - t, 3);          // ease-out cúbico
     zoomAtual = { ini: de.ini + (alvo.ini - de.ini) * e, fim: de.fim + (alvo.fim - de.fim) * e };
-    topoAtual = tetoDeAntes + (teto - tetoDeAntes) * e;
-    pintarEvolucao(zoomAtual, topoAtual);
+    faixaAtual = { piso: fxDe.piso + (fx.piso - fxDe.piso) * e, teto: fxDe.teto + (fx.teto - fxDe.teto) * e };
+    pintarEvolucao(zoomAtual, faixaAtual);
     if (t < 1) zoomAnim = requestAnimationFrame(passo);
   };
   zoomAnim = requestAnimationFrame(passo);
@@ -427,7 +464,7 @@ function desenharEvolucao() {
   const assinatura = pontos.length + '|' + (pontos[0] && pontos[0].chave) + '|' + (pontos[pontos.length - 1] || {}).chave;
   if (assinatura !== desenharEvolucao._assinatura) {
     desenharEvolucao._assinatura = assinatura;
-    zoomAtual = null; topoAtual = null;
+    zoomAtual = null; faixaAtual = null;
   }
 
   evoPontos = pontos;
@@ -437,8 +474,10 @@ function desenharEvolucao() {
   animarZoom();
 }
 
-/** Desenha o SVG a partir do cache, para a janela e o teto informados. */
-function pintarEvolucao(jan, topo) {
+/** Desenha o SVG a partir do cache, para a janela e a faixa informadas. */
+function pintarEvolucao(jan, fx) {
+  const { piso, teto } = fx;
+  const amp = Math.max(1e-9, teto - piso);
   const pontos = evoPontos;
   const L = 760, A = 250, ml = 62, mr = 14, mt = 16, mb = 36;
   const larg = L - ml - mr;
@@ -447,7 +486,7 @@ function pintarEvolucao(jan, topo) {
   //  ponto vai ao centro. É o caso em que o resultado fica igual ao do Qlik —
   //  de propósito, porque é uma escolha sua no bloco ZOOM.
   const X = (i) => (vao < 0.001 ? ml + larg / 2 : ml + (i - jan.ini) * larg / vao);
-  const Y = (v) => mt + (1 - v / topo) * (A - mt - mb);
+  const Y = (v) => mt + (1 - (v - piso) / amp) * (A - mt - mb);
 
   /*  Rótulo centralizado no ponto da borda transborda o recorte e sai
    *  cortado pela metade ("R$ 99" em vez de "R$ 995 mil"). Nas pontas o
@@ -463,19 +502,69 @@ function pintarEvolucao(jan, topo) {
 
   let g = '';
   for (let k = 0; k <= 4; k++) {
-    const v = topo * k / 4;
+    const v = piso + amp * k / 4;
     g += `<line class="grade" x1="${ml}" x2="${L - mr}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"/>
           <text class="eixo" x="${ml - 8}" y="${(Y(v) + 4).toFixed(1)}" text-anchor="end">${valorDaMedida(v)}</text>`;
+  }
+
+  //  Marca de quebra: o eixo não começa em zero, e quem olhar de longe tem
+  //  que ver isso antes de ler a inclinação como se fosse absoluta. Sem a
+  //  marca, o corte da base é desonestidade gráfica; com ela, é zoom.
+  if (piso > 0) {
+    const yb = Y(piso);
+    g += `<path class="corte-eixo" d="M${ml - 13} ${(yb - 2).toFixed(1)} l6 -4 l-6 -4"
+            fill="none"/>
+          <path class="corte-eixo" d="M${ml - 13} ${(yb + 7).toFixed(1)} l6 -4 l-6 -4"
+            fill="none"/>
+          <title>eixo cortado: começa em ${valorDaMedida(piso)}, não em zero</title>`;
   }
 
   //  Tudo que é série entra no recorte: fora da janela a linha continua
   //  existindo (é o que torna o movimento legível) mas não invade os eixos.
   const linha = pontos.map((p, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(p.valor).toFixed(1)).join(' ');
-  let serie = `<path d="${linha} L${X(pontos.length - 1).toFixed(1)} ${Y(0).toFixed(1)} L${X(0).toFixed(1)} ${Y(0).toFixed(1)} Z" class="area"/>`;
+  let serie = `<path d="${linha} L${X(pontos.length - 1).toFixed(1)} ${Y(piso).toFixed(1)} L${X(0).toFixed(1)} ${Y(piso).toFixed(1)} Z" class="area"/>`;
   serie += `<path d="${linha}" class="linha"/>`;
 
   const dentro = (i) => i >= jan.ini - 0.5 && i <= jan.fim + 0.5;
   const visiveis = pontos.filter((_, i) => dentro(i)).length;
+
+  /*  Valor sobre o ponto — quais entram.
+   *
+   *  Primeira tentativa minha foi contar quantos cabem e alternar duas
+   *  alturas. Não funciona: o rótulo acompanha a altura do próprio ponto,
+   *  então quando a linha sobe o deslocamento APROXIMA em vez de afastar.
+   *  Deu `67.202` escrito por cima de `72.882` na verificação em tela.
+   *
+   *  O que funciona é testar colisão de verdade, em duas dimensões. Cada
+   *  rótulo reserva uma caixa; quem bateria numa caixa já reservada não é
+   *  desenhado. O selecionado escolhe primeiro — é o que a pessoa está
+   *  olhando e não pode perder a vez para um vizinho qualquer.
+   *
+   *  Resultado: com rótulo curto (uma contagem) entram os 25; com rótulo
+   *  longo ("R$ 1,2 mi") entram os que couberem, espaçados; no zoom entram
+   *  todos. Nunca sobrepõe, que é a única regra inegociável — número por
+   *  cima de número não é densidade, é erro de leitura esperando acontecer.
+   *
+   *  Largura por caractere estimada em 6,6 px: medir no DOM a cada quadro
+   *  da animação custaria um reflow por rótulo. Erra para mais, e errar
+   *  para mais aqui significa esconder em vez de sobrepor. */
+  const comValor = new Set();
+  const caixas = [];
+  const tentarRotulo = (i) => {
+    const texto = valorDaMedida(pontos[i].valor);
+    const x = X(i), y = Y(pontos[i].valor) - 12;
+    const [an, ax] = ancorar(x, texto);
+    const w = texto.length * 6.6;
+    const x0 = (an === 'start' ? ax : an === 'end' ? ax - w : ax - w / 2) - 3;
+    const c = { x0, x1: x0 + w + 6, y0: y - 12, y1: y + 4 };
+    if (caixas.some((b) => c.x0 < b.x1 && c.x1 > b.x0 && c.y0 < b.y1 && c.y1 > b.y0)) return;
+    caixas.push(c);
+    comValor.add(i);
+  };
+  const iSel = pontos.findIndex((p) => mesEscolhido && mesEscolhido.ano === p.ano && mesEscolhido.mes === p.mes);
+  if (iSel >= 0 && dentro(iSel)) tentarRotulo(iSel);
+  pontos.forEach((_, i) => { if (i !== iSel && dentro(i)) tentarRotulo(i); });
+
   const pular = visiveis > 16 ? Math.ceil(visiveis / 14) : 1;
   let k = 0;
   pontos.forEach((p, i) => {
@@ -489,7 +578,7 @@ function pintarEvolucao(jan, topo) {
     serie += `<circle class="ponto${sel ? ' sel' : ''}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${sel ? 6 : 3.5}"/>`;
     //  Com o zoom aberto o valor cabe na tela: mostra o número em cima do
     //  ponto, como no painel do Qlik. Com 19 meses não cabe e vira sujeira.
-    if (visivel && visiveis <= 9) {
+    if (comValor.has(i)) {
       const rot = valorDaMedida(p.valor);
       const [an, ax] = ancorar(x, rot);
       serie += `<text class="evo-val${sel ? ' forte' : ''}" x="${ax.toFixed(1)}" y="${(y - 12).toFixed(1)}" text-anchor="${an}">${rot}</text>`;
@@ -510,10 +599,13 @@ function pintarEvolucao(jan, topo) {
   const nota = evoParcial
     ? `${evoParcial.rotulo} está em andamento (${valorDaMedida(evoParcial.valor)} até agora) e fica fora da linha`
     : '';
+  const cortado = piso > 0
+    ? `<span class="aviso-corte" title="O eixo começa em ${esc(valorDaMedida(piso))} para a variação do período caber na tela. Olhe os números, não só a inclinação.">eixo a partir de ${esc(valorDaMedida(piso))}</span>`
+    : '';
   const voltar = (ZOOM.ligado && mesEscolhido)
     ? `<button type="button" class="evo-voltar" data-limpar="@mes">⤢ ver os ${pontos.length} meses</button>`
     : '';
-  $('evo-nota').innerHTML = esc(nota) + voltar;
+  $('evo-nota').innerHTML = esc(nota) + cortado + voltar;
 }
 
 /* ------------------------------------------------------------------ */
