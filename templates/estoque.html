@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% import "_fmt.html" as f %}
+{% block titulo %}Estoque — {{ negocio.nome }}{% endblock %}
+
+{% block conteudo %}
+
+<h2>Estoque</h2>
+
+<div class="cartoes">
+  <div class="cartao destaque">
+    <div class="rotulo">Dinheiro parado em estoque</div>
+    <div class="valor">{{ f.curto(resumo.valor_parado) }}</div>
+    <div class="nota">{{ f.numero(resumo.itens) }} itens em prateleira</div>
+  </div>
+  <div class="cartao">
+    <div class="rotulo">Faltando na prateleira</div>
+    <div class="valor {{ 'desce' if resumo.em_ruptura|int else '' }}">{{ resumo.em_ruptura }}</div>
+    <div class="nota">abaixo do estoque mínimo — venda que você perde</div>
+  </div>
+  <div class="cartao">
+    <div class="rotulo">Vence em 30 dias</div>
+    <div class="valor {{ 'alerta' if resumo.vencendo|int else '' }}">{{ resumo.vencendo }}</div>
+    <div class="nota">{{ f.curto(resumo.valor_em_risco) }} em risco de virar perda</div>
+  </div>
+  <div class="cartao">
+    <div class="rotulo">Já vencido</div>
+    <div class="valor {{ 'desce' if resumo.vencidos|int else '' }}">{{ resumo.vencidos }}</div>
+    <div class="nota">precisa sair da prateleira hoje</div>
+  </div>
+</div>
+
+{% if vencendo %}
+<div class="achado" style="margin-top:20px">
+  <strong>Agir esta semana</strong>
+  <p>
+    {{ resumo.vencendo }} item(ns) vencem em até 30 dias, somando
+    <b>{{ f.curto(resumo.valor_em_risco) }}</b>. Promoção agora recupera parte disso;
+    daqui a trinta dias, vira prejuízo inteiro.
+  </p>
+</div>
+{% endif %}
+
+<div class="painel">
+  <h3>Vencendo primeiro</h3>
+  <p class="explica">Ordenado por data de validade. O que está em vermelho já venceu.</p>
+  <table>
+    <thead>
+      <tr><th>Produto</th><th>Unidade</th><th class="num">Quantidade</th>
+          <th class="num">Validade</th><th class="num">Valor</th></tr>
+    </thead>
+    <tbody>
+      {% for i in vencendo %}
+      <tr>
+        <td>{{ i.produto }}<br><small style="color:var(--suave)">{{ i.categoria }}</small></td>
+        <td>{{ i.unidade }}</td>
+        <td class="num">{{ f.numero(i.quantidade, 1) }}</td>
+        <td class="num">
+          <span class="etiqueta {{ 'perigo' if i.dias_restantes|int < 0 else ('atencao' if i.dias_restantes|int <= 15 else 'ok') }}">
+            {% if i.dias_restantes|int < 0 %}vencido há {{ -i.dias_restantes|int }}d
+            {% else %}{{ i.dias_restantes }} dias{% endif %}
+          </span>
+        </td>
+        <td class="num">{{ f.dinheiro(i.valor) }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="vazio">Nenhum item próximo do vencimento.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="colunas">
+  <div class="painel">
+    <h3>Faltando na prateleira</h3>
+    <p class="explica">Abaixo do mínimo. Cada um desses é cliente que chega e não encontra.</p>
+    <table>
+      <thead><tr><th>Produto</th><th>Unidade</th><th class="num">Tem</th><th class="num">Mínimo</th></tr></thead>
+      <tbody>
+        {% for i in ruptura %}
+        <tr>
+          <td>{{ i.produto }}</td>
+          <td><small>{{ i.unidade }}</small></td>
+          <td class="num"><span class="desce">{{ f.numero(i.quantidade, 1) }}</span></td>
+          <td class="num">{{ f.numero(i.estoque_minimo, 1) }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="vazio">Nada em falta.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="painel">
+    <h3>Encalhado — dinheiro dormindo</h3>
+    <p class="explica">
+      Estoque para mais de 45 dias de venda, ou produto que não vendeu nada em 90 dias.
+      É capital que poderia estar girando.
+    </p>
+    <table>
+      <thead><tr><th>Produto</th><th class="num">Valor</th><th class="num">Dias de estoque</th></tr></thead>
+      <tbody>
+        {% for i in encalhado %}
+        <tr>
+          <td>{{ i.produto }}<br><small style="color:var(--suave)">{{ i.unidade }}</small></td>
+          <td class="num">{{ f.dinheiro(i.valor) }}</td>
+          <td class="num">
+            {% if i.dias_de_cobertura %}
+              <span class="etiqueta atencao">{{ '%.0f'|format(i.dias_de_cobertura|float) }} dias</span>
+            {% else %}
+              <span class="etiqueta perigo">não vendeu</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="3" class="vazio">Nenhum item encalhado.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}

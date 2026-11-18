@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% import "_fmt.html" as f %}
+{% block titulo %}Vendas — {{ negocio.nome }}{% endblock %}
+
+{% block conteudo %}
+
+<h2>Vendas</h2>
+
+<div class="filtros">
+  {% for d, rotulo in [(30, '30 dias'), (90, '90 dias'), (180, '6 meses'), (365, '1 ano')] %}
+    <a href="/vendas?dias={{ d }}" class="{{ 'ativo' if dias == d }}">{{ rotulo }}</a>
+  {% endfor %}
+</div>
+
+{% if viloes %}
+<div class="achado">
+  <strong>O que o olho não pega</strong>
+  <p>
+    <b>{{ viloes[0].produto }}</b> está entre os seus produtos que mais vendem, mas
+    deixa só <b>{{ '%.1f'|format(viloes[0].margem_pct|float) | replace('.', ',') }}%</b> de lucro —
+    bem abaixo do resto da loja. Vende muito e lucra pouco.
+    A tabela no fim da tela mostra os outros casos.
+  </p>
+</div>
+{% endif %}
+
+<div class="painel">
+  <h3>Faturamento e lucro mês a mês</h3>
+  <p class="explica">Dois anos de histórico. A distância entre as duas linhas é o que sobra para pagar as contas.</p>
+  <div id="g-mensal" class="grafico alto"></div>
+</div>
+
+<div class="colunas">
+  <div class="painel">
+    <h3>Para onde vai o faturamento</h3>
+    <p class="explica">Participação de cada categoria nos últimos {{ dias }} dias.</p>
+    <div id="g-categorias" class="grafico"></div>
+  </div>
+  <div class="painel">
+    <h3>Qual dia realmente fatura mais</h3>
+    <p class="explica">Média por dia da semana, últimos 6 meses. Quase sempre surpreende.</p>
+    <div id="g-semana" class="grafico"></div>
+  </div>
+</div>
+
+{% if negocio.unidades|length > 1 %}
+<div class="painel">
+  <h3>Comparativo entre unidades</h3>
+  <p class="explica">Faturamento mensal de cada loja nos últimos 12 meses.</p>
+  <div id="g-unidades" class="grafico"></div>
+</div>
+{% endif %}
+
+<div class="colunas">
+  <div class="painel">
+    <h3>Mais vendidos</h3>
+    <p class="explica">Últimos {{ dias }} dias, por faturamento.</p>
+    <table>
+      <thead><tr><th>Produto</th><th class="num">Vendido</th><th class="num">Lucro</th><th class="num">Margem</th></tr></thead>
+      <tbody>
+        {% for p in produtos %}
+        <tr>
+          <td>{{ p.produto }}<br><small style="color:var(--suave)">{{ p.categoria }}</small></td>
+          <td class="num">{{ f.curto(p.receita) }}</td>
+          <td class="num">{{ f.curto(p.margem) }}</td>
+          <td class="num">
+            <span class="etiqueta {{ 'ok' if p.margem_pct|float >= 40 else ('atencao' if p.margem_pct|float >= 20 else 'perigo') }}">
+              {{ '%.0f'|format(p.margem_pct|float) }}%
+            </span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="painel">
+    <h3>Vendem bem, lucram mal</h3>
+    <p class="explica">
+      Produtos acima da mediana de faturamento, ordenados pela pior margem.
+      São os candidatos a renegociar com o fornecedor ou reajustar o preço.
+    </p>
+    <table>
+      <thead><tr><th>Produto</th><th class="num">Vendido</th><th class="num">Lucro</th><th class="num">Margem</th></tr></thead>
+      <tbody>
+        {% for p in viloes %}
+        <tr>
+          <td>{{ p.produto }}<br><small style="color:var(--suave)">{{ p.categoria }}</small></td>
+          <td class="num">{{ f.curto(p.receita) }}</td>
+          <td class="num">{{ f.curto(p.margem) }}</td>
+          <td class="num"><span class="etiqueta perigo">{{ '%.0f'|format(p.margem_pct|float) }}%</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const g = {{ graficos | safe }};
+  const marca = getComputedStyle(document.documentElement).getPropertyValue('--marca').trim();
+  const brl = v => 'R$ ' + (v||0).toLocaleString('pt-BR', {maximumFractionDigits: 0});
+  const criar = (id, opcao) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const c = echarts.init(el);
+    c.setOption(opcao);
+    window.addEventListener('resize', () => c.resize());
+  };
+
+  criar('g-mensal', {
+    tooltip: { trigger: 'axis', valueFormatter: brl },
+    legend: { data: ['Faturamento', 'Lucro bruto'], bottom: 0 },
+    grid: { left: 65, right: 20, top: 20, bottom: 55 },
+    xAxis: { type: 'category', data: g.mensal.meses, axisLabel: { rotate: 45 } },
+    yAxis: { type: 'value', axisLabel: { formatter: v => 'R$ ' + (v/1000).toFixed(0) + 'k' } },
+    series: [
+      { name: 'Faturamento', type: 'line', data: g.mensal.receita, smooth: true,
+        areaStyle: { opacity: .12 }, itemStyle: { color: marca }, symbol: 'none', lineStyle: { width: 3 } },
+      { name: 'Lucro bruto', type: 'line', data: g.mensal.margem, smooth: true,
+        itemStyle: { color: '#15803d' }, symbol: 'none', lineStyle: { width: 2 } }
+    ]
+  });
+
+  criar('g-categorias', {
+    tooltip: { trigger: 'item', valueFormatter: brl },
+    legend: { type: 'scroll', bottom: 0 },
+    series: [{
+      type: 'pie', radius: ['45%', '70%'], center: ['50%', '45%'],
+      data: g.categorias, label: { formatter: '{b}\n{d}%', fontSize: 11 }
+    }]
+  });
+
+  criar('g-semana', {
+    tooltip: { trigger: 'axis', valueFormatter: brl },
+    grid: { left: 65, right: 20, top: 20, bottom: 40 },
+    xAxis: { type: 'category', data: g.semana.dias },
+    yAxis: { type: 'value', axisLabel: { formatter: v => 'R$ ' + (v/1000).toFixed(0) + 'k' } },
+    series: [{
+      type: 'bar', data: g.semana.valores, itemStyle: { color: marca, borderRadius: [6,6,0,0] }
+    }]
+  });
+
+  if (g.unidades && g.unidades.series.length) {
+    criar('g-unidades', {
+      tooltip: { trigger: 'axis', valueFormatter: brl },
+      legend: { bottom: 0 },
+      grid: { left: 65, right: 20, top: 20, bottom: 55 },
+      xAxis: { type: 'category', data: g.unidades.meses, axisLabel: { rotate: 45 } },
+      yAxis: { type: 'value', axisLabel: { formatter: v => 'R$ ' + (v/1000).toFixed(0) + 'k' } },
+      series: g.unidades.series.map(s => ({
+        name: s.nome, type: 'bar', stack: 'total', data: s.valores
+      }))
+    });
+  }
+</script>
+{% endblock %}

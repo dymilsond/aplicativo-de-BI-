@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% import "_fmt.html" as f %}
+{% block titulo %}Caixa — {{ negocio.nome }}{% endblock %}
+
+{% block conteudo %}
+
+<h2>Caixa</h2>
+
+<div class="cartoes">
+  <div class="cartao">
+    <div class="rotulo">Entrou no mês</div>
+    <div class="valor sobe">{{ f.dinheiro(mes.entradas) }}</div>
+    <div class="nota">recebimento de venda</div>
+  </div>
+  <div class="cartao">
+    <div class="rotulo">Saiu no mês</div>
+    <div class="valor desce">{{ f.dinheiro(mes.saidas) }}</div>
+    <div class="nota">fornecedor, folha, aluguel, impostos</div>
+  </div>
+  <div class="cartao destaque">
+    <div class="rotulo">Sobrou no mês</div>
+    <div class="valor {{ 'sobe' if mes.saldo|float >= 0 else 'desce' }}">{{ f.dinheiro(mes.saldo) }}</div>
+    <div class="nota">
+      {% if mes.entradas|float > 0 %}
+        {{ '%.1f'|format(100.0 * mes.saldo|float / mes.entradas|float) | replace('.', ',') }}% do que entrou
+      {% else %}—{% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="painel" style="margin-top:20px">
+  <h3>Entrou, saiu e sobrou — mês a mês</h3>
+  <p class="explica">
+    As barras são entrada e saída; a linha é o que sobrou. Linha abaixo de zero
+    é mês em que o negócio consumiu caixa em vez de gerar.
+  </p>
+  <div id="g-fluxo" class="grafico alto"></div>
+</div>
+
+<div class="colunas">
+  <div class="painel">
+    <h3>Para onde vai o dinheiro</h3>
+    <p class="explica">Despesas dos últimos 6 meses, por categoria.</p>
+    <div id="g-despesas" class="grafico"></div>
+  </div>
+  <div class="painel">
+    <h3>Como o cliente paga</h3>
+    <p class="explica">
+      Últimos 90 dias. Importa porque cartão demora a cair e cobra taxa —
+      dinheiro e Pix entram na hora.
+    </p>
+    <div id="g-formas" class="grafico"></div>
+  </div>
+</div>
+
+<div class="painel">
+  <h3>Despesas em detalhe</h3>
+  <table>
+    <thead><tr><th>Categoria</th><th class="num">Total em 6 meses</th><th class="num">Média mensal</th></tr></thead>
+    <tbody>
+      {% for d in despesas %}
+      <tr>
+        <td>{{ d.categoria }}</td>
+        <td class="num">{{ f.dinheiro(d.total) }}</td>
+        <td class="num">{{ f.dinheiro(d.total|float / 6) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const g = {{ graficos | safe }};
+  const brl = v => 'R$ ' + (v||0).toLocaleString('pt-BR', {maximumFractionDigits: 0});
+  const criar = (id, opcao) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const c = echarts.init(el);
+    c.setOption(opcao);
+    window.addEventListener('resize', () => c.resize());
+  };
+
+  criar('g-fluxo', {
+    tooltip: { trigger: 'axis', valueFormatter: brl },
+    legend: { data: ['Entradas', 'Saídas', 'Sobrou'], bottom: 0 },
+    grid: { left: 70, right: 20, top: 20, bottom: 55 },
+    xAxis: { type: 'category', data: g.fluxo.meses, axisLabel: { rotate: 45 } },
+    yAxis: { type: 'value', axisLabel: { formatter: v => 'R$ ' + (v/1000).toFixed(0) + 'k' } },
+    series: [
+      { name: 'Entradas', type: 'bar', data: g.fluxo.entradas, itemStyle: { color: '#86efac', borderRadius: [4,4,0,0] } },
+      { name: 'Saídas', type: 'bar', data: g.fluxo.saidas, itemStyle: { color: '#fca5a5', borderRadius: [4,4,0,0] } },
+      { name: 'Sobrou', type: 'line', data: g.fluxo.saldo, smooth: true, symbol: 'circle', symbolSize: 6,
+        itemStyle: { color: '#0f172a' }, lineStyle: { width: 3 },
+        markLine: { silent: true, symbol: 'none', data: [{ yAxis: 0 }], lineStyle: { color: '#94a3b8', type: 'dashed' } } }
+    ]
+  });
+
+  criar('g-despesas', {
+    tooltip: { trigger: 'item', valueFormatter: brl },
+    legend: { type: 'scroll', bottom: 0 },
+    series: [{ type: 'pie', radius: ['45%','70%'], center: ['50%','45%'], data: g.despesas,
+               label: { formatter: '{b}\n{d}%', fontSize: 11 } }]
+  });
+
+  criar('g-formas', {
+    tooltip: { trigger: 'item', valueFormatter: brl },
+    legend: { bottom: 0 },
+    series: [{ type: 'pie', radius: '62%', center: ['50%','45%'], data: g.formas,
+               label: { formatter: '{b}\n{d}%', fontSize: 11 } }]
+  });
+</script>
+{% endblock %}

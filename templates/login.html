@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Entrar</title>
+  <link rel="stylesheet" href="/estatico/estilo.css">
+</head>
+<body class="tela-login">
+
+<div class="cartao-login">
+  <h1>BI para o seu negócio</h1>
+  <p class="sub">Entre com o usuário do seu estabelecimento.</p>
+
+  {% if erro %}<div class="erro">Usuário ou senha inválidos.</div>{% endif %}
+
+  <form method="post" action="/entrar">
+    <label>Usuário
+      <input name="login" autocomplete="username" autofocus required>
+    </label>
+    <label>Senha
+      <input name="senha" type="password" autocomplete="current-password" required>
+    </label>
+    <button type="submit">Entrar</button>
+  </form>
+
+  <details class="demo">
+    <summary>Usuários da demonstração (senha <code>123</code>)</summary>
+    <table>
+      <tr><th>Usuário</th><th>Quem é</th><th>Enxerga</th></tr>
+      <tr><td><code>padaria</code></td><td>Dono da padaria</td><td>todas as unidades</td></tr>
+      <tr><td><code>padaria.filial</code></td><td>Gerente da filial</td><td><b>só a filial</b></td></tr>
+      <tr><td><code>mercado</code></td><td>Dona do supermercado</td><td>todas as lojas</td></tr>
+      <tr><td><code>mercado.olinda</code></td><td>Gerente de Olinda</td><td><b>só Olinda</b></td></tr>
+      <tr><td><code>farmacia</code></td><td>Dono da farmácia</td><td>todas as unidades</td></tr>
+      <tr><td><code>farmacia.centro</code></td><td>Gerente do Centro</td><td><b>só o Centro</b></td></tr>
+    </table>
+    <p class="nota">
+      Entre com um usuário “todas” e depois com o restrito do mesmo negócio:
+      os números mudam porque a <b>redução de dados</b> é aplicada no servidor.
+    </p>
+  </details>
+</div>
+
+</body>
+</html>

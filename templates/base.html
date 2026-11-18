@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block titulo %}{{ negocio.nome }}{% endblock %}</title>
+  <link rel="stylesheet" href="/estatico/estilo.css">
+  <script src="/estatico/echarts.min.js"></script>
+  <script src="/estatico/htmx.min.js" defer></script>
+  <style>:root { --marca: {{ negocio.cor }}; }</style>
+</head>
+<body>
+
+<header class="topo">
+  <div class="topo-esq">
+    <span class="logo" aria-hidden="true">◧</span>
+    <div>
+      <strong>{{ negocio.nome }}</strong>
+      <small>{{ negocio.ramo }}</small>
+    </div>
+  </div>
+  <div class="topo-dir">
+    <div class="usuario">
+      <strong>{{ usuario.nome }}</strong>
+      <small title="Redução de dados aplicada no servidor">
+        vendo {{ usuario.descricao_do_acesso() }}
+      </small>
+    </div>
+    <a class="sair" href="/sair">Sair</a>
+  </div>
+</header>
+
+<nav class="menu">
+  <a href="/"        class="{{ 'ativo' if tela == 'hoje' }}">Hoje</a>
+  <a href="/vendas"  class="{{ 'ativo' if tela == 'vendas' }}">Vendas</a>
+  <a href="/estoque" class="{{ 'ativo' if tela == 'estoque' }}">Estoque</a>
+  <a href="/caixa"   class="{{ 'ativo' if tela == 'caixa' }}">Caixa</a>
+  <a href="/futuro"  class="{{ 'ativo' if tela == 'futuro' }}">Futuro</a>
+</nav>
+
+<main>
+  {% block conteudo %}{% endblock %}
+</main>
+
+<footer>
+  Dado fictício gerado para demonstração — {{ negocio.nome }}.
+</footer>
+
+{% block scripts %}{% endblock %}
+</body>
+</html>

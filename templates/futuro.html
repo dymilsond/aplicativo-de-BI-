@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% import "_fmt.html" as f %}
+{% block titulo %}Futuro — {{ negocio.nome }}{% endblock %}
+
+{% block conteudo %}
+
+<h2>Futuro</h2>
+
+<div class="achado">
+  <strong>Como esta previsão é feita</strong>
+  <p>
+    Pegamos a média dos últimos meses, corrigida pelo que <i>este mês costuma ser</i>
+    no seu negócio — porque dezembro não é igual a fevereiro. Não é adivinhação:
+    é o seu próprio histórico de dois anos projetado para frente.
+    Se acontecer algo fora do normal, a previsão erra. Ela serve para planejar, não para prometer.
+  </p>
+</div>
+
+{% if prev.previsto %}
+<div class="cartoes">
+  {% for p in prev.previsto %}
+  <div class="cartao {{ 'destaque' if loop.first }}">
+    <div class="rotulo">{{ mes_longo(p.mes) | capitalize }}</div>
+    <div class="valor">{{ f.dinheiro(p.receita) }}</div>
+    <div class="nota">
+      {% if loop.first %}
+        {{ f.variacao(p.receita, prev.historico[-1].receita if prev.historico else 0) }}
+        contra o último mês fechado
+      {% else %}previsão de faturamento{% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="painel" style="margin-top:20px">
+  <h3>Faturamento: o que foi e o que vem</h3>
+  <p class="explica">Linha cheia é o que já aconteceu. Linha tracejada é a projeção.</p>
+  <div id="g-futuro" class="grafico alto"></div>
+</div>
+
+<h2>Caixa deste mês, projetado</h2>
+
+<div class="cartoes">
+  <div class="cartao">
+    <div class="rotulo">Já entrou</div>
+    <div class="valor">{{ f.dinheiro(caixa.entradas) }}</div>
+    <div class="nota">do começo do mês até hoje</div>
+  </div>
+  <div class="cartao">
+    <div class="rotulo">Deve entrar até o fim do mês</div>
+    <div class="valor sobe">{{ f.dinheiro(caixa.entradas_projetadas) }}</div>
+    <div class="nota">mantendo o ritmo de venda atual</div>
+  </div>
+  <div class="cartao">
+    <div class="rotulo">Deve sair</div>
+    <div class="valor desce">{{ f.dinheiro(caixa.saidas_projetadas) }}</div>
+    <div class="nota">com base no mês passado fechado</div>
+  </div>
+  <div class="cartao destaque">
+    <div class="rotulo">Deve sobrar</div>
+    <div class="valor {{ 'sobe' if caixa.saldo_projetado|float >= 0 else 'desce' }}">
+      {{ f.dinheiro(caixa.saldo_projetado) }}
+    </div>
+    <div class="nota">
+      {% if caixa.saldo_projetado|float < 0 %}
+        atenção: o mês tende a fechar no vermelho
+      {% else %}
+        projeção para o fechamento do mês
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="painel" style="margin-top:20px">
+  <h3>O que isso significa na prática</h3>
+  <p class="explica" style="margin:0">
+    {% if prev.variacao_proximo_mes|float > 3 %}
+      O próximo mês tende a ser <b class="sobe">{{ '%.0f'|format(prev.variacao_proximo_mes|float) }}% maior</b>
+      que o último fechado. Vale conferir se o estoque aguenta e se tem gente suficiente escalada.
+    {% elif prev.variacao_proximo_mes|float < -3 %}
+      O próximo mês tende a ser <b class="desce">{{ '%.0f'|format(-prev.variacao_proximo_mes|float) }}% menor</b>
+      que o último fechado. É hora de segurar compra e evitar encher estoque.
+    {% else %}
+      O próximo mês tende a ficar <b>parecido</b> com o último fechado. Sem movimento brusco à vista.
+    {% endif %}
+  </p>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const g = {{ grafico | safe }};
+  const marca = getComputedStyle(document.documentElement).getPropertyValue('--marca').trim();
+  const brl = v => v == null ? '—' : 'R$ ' + v.toLocaleString('pt-BR', {maximumFractionDigits: 0});
+  const c = echarts.init(document.getElementById('g-futuro'));
+  c.setOption({
+    tooltip: { trigger: 'axis', valueFormatter: brl },
+    legend: { data: ['Realizado', 'Previsto'], bottom: 0 },
+    grid: { left: 70, right: 20, top: 20, bottom: 55 },
+    xAxis: { type: 'category', data: g.meses, axisLabel: { rotate: 45 } },
+    yAxis: { type: 'value', axisLabel: { formatter: v => 'R$ ' + (v/1000).toFixed(0) + 'k' } },
+    series: [
+      { name: 'Realizado', type: 'line', data: g.real, smooth: true, symbol: 'none',
+        lineStyle: { width: 3 }, itemStyle: { color: marca }, areaStyle: { opacity: .10 } },
+      { name: 'Previsto', type: 'line', data: g.previsto, smooth: true,
+        symbol: 'circle', symbolSize: 7,
+        lineStyle: { width: 3, type: 'dashed' }, itemStyle: { color: '#b45309' } }
+    ]
+  });
+  window.addEventListener('resize', () => c.resize());
+</script>
+{% endblock %}

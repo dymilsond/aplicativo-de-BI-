@@ -1,0 +1,5 @@
+venv/
+__pycache__/
+*.py[cod]
+dados/*.duckdb
+dados/*.wal

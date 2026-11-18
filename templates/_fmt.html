@@ -1,0 +1,24 @@
+{# Macros de formatação em português — dinheiro, número e variação. #}
+{% macro dinheiro(v, casas=2) -%}
+R$ {{ '{:,.{}f}'.format(v|float, casas).replace(',', '§').replace('.', ',').replace('§', '.') }}
+{%- endmacro %}
+
+{% macro curto(v) -%}
+{%- set n = v|float -%}
+{%- if n >= 1000000 -%}R$ {{ '%.1f'|format(n/1000000) | replace('.', ',') }} mi
+{%- elif n >= 1000 -%}R$ {{ '%.0f'|format(n/1000) }} mil
+{%- else -%}R$ {{ '%.0f'|format(n) }}{%- endif -%}
+{%- endmacro %}
+
+{% macro numero(v, casas=0) -%}
+{{ '{:,.{}f}'.format(v|float, casas).replace(',', '§').replace('.', ',').replace('§', '.') }}
+{%- endmacro %}
+
+{% macro variacao(atual, anterior) -%}
+{%- if anterior and anterior|float > 0 -%}
+  {%- set p = 100.0 * (atual|float - anterior|float) / anterior|float -%}
+  <span class="{{ 'sobe' if p >= 0 else 'desce' }}">{{ '%+.1f'|format(p) | replace('.', ',') }}%</span>
+{%- else -%}
+  <span class="nota">—</span>
+{%- endif -%}
+{%- endmacro %}

@@ -1,0 +1,175 @@
+/* Visual do aplicativo. Um arquivo só, sem framework CSS.
+   A cor da marca vem do catálogo do negócio, via --marca. */
+
+:root {
+  --marca: #2563eb;
+  --fundo: #f1f5f9;
+  --papel: #ffffff;
+  --texto: #0f172a;
+  --suave: #64748b;
+  --borda: #e2e8f0;
+  --bom: #15803d;
+  --ruim: #b91c1c;
+  --atencao: #b45309;
+  --raio: 12px;
+  --sombra: 0 1px 2px rgba(15, 23, 42, .06), 0 4px 12px rgba(15, 23, 42, .05);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+  background: var(--fundo);
+  color: var(--texto);
+  font-size: 15px;
+}
+
+/* ---------- topo e menu ---------- */
+
+.topo {
+  background: var(--marca);
+  color: #fff;
+  padding: 12px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.topo-esq { display: flex; align-items: center; gap: 12px; }
+.topo-esq .logo { font-size: 28px; opacity: .9; }
+.topo strong { display: block; font-size: 16px; }
+.topo small { display: block; opacity: .85; font-size: 12px; }
+.topo-dir { display: flex; align-items: center; gap: 16px; }
+.usuario { text-align: right; }
+.sair {
+  color: #fff; text-decoration: none; border: 1px solid rgba(255,255,255,.5);
+  padding: 6px 12px; border-radius: 8px; font-size: 13px;
+}
+.sair:hover { background: rgba(255,255,255,.15); }
+
+.menu {
+  background: var(--papel);
+  border-bottom: 1px solid var(--borda);
+  padding: 0 20px;
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+}
+.menu a {
+  padding: 13px 18px;
+  text-decoration: none;
+  color: var(--suave);
+  font-weight: 600;
+  border-bottom: 3px solid transparent;
+  white-space: nowrap;
+}
+.menu a:hover { color: var(--texto); }
+.menu a.ativo { color: var(--marca); border-bottom-color: var(--marca); }
+
+main { padding: 20px; max-width: 1400px; margin: 0 auto; }
+footer { padding: 24px 20px; text-align: center; color: var(--suave); font-size: 12px; }
+
+/* ---------- blocos ---------- */
+
+h2 { font-size: 17px; margin: 28px 0 12px; }
+h2:first-child { margin-top: 0; }
+
+.cartoes { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
+
+.cartao {
+  background: var(--papel);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  padding: 16px 18px;
+  box-shadow: var(--sombra);
+}
+.cartao .rotulo { color: var(--suave); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+.cartao .valor { font-size: 26px; font-weight: 700; margin: 6px 0 2px; }
+.cartao .nota { font-size: 13px; color: var(--suave); }
+.cartao.destaque { border-left: 4px solid var(--marca); }
+
+.sobe { color: var(--bom); font-weight: 600; }
+.desce { color: var(--ruim); font-weight: 600; }
+.alerta { color: var(--atencao); font-weight: 600; }
+
+.painel {
+  background: var(--papel);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  padding: 16px 18px;
+  box-shadow: var(--sombra);
+  margin-bottom: 16px;
+}
+.painel h3 { margin: 0 0 4px; font-size: 15px; }
+.painel .explica { margin: 0 0 14px; color: var(--suave); font-size: 13px; }
+
+.colunas { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 900px) { .colunas { grid-template-columns: 1fr; } }
+
+.grafico { width: 100%; height: 300px; }
+.grafico.alto { height: 360px; }
+
+/* ---------- tabelas ---------- */
+
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { padding: 9px 10px; text-align: left; border-bottom: 1px solid var(--borda); }
+th { color: var(--suave); font-size: 12px; text-transform: uppercase; letter-spacing: .03em; font-weight: 600; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+tbody tr:hover { background: #f8fafc; }
+.vazio { color: var(--suave); padding: 18px 0; }
+
+.etiqueta {
+  display: inline-block; padding: 2px 8px; border-radius: 999px;
+  font-size: 12px; font-weight: 600;
+}
+.etiqueta.ok { background: #dcfce7; color: #166534; }
+.etiqueta.atencao { background: #fef3c7; color: #92400e; }
+.etiqueta.perigo { background: #fee2e2; color: #991b1b; }
+
+.filtros { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+.filtros a {
+  padding: 6px 14px; border-radius: 999px; text-decoration: none;
+  background: var(--papel); border: 1px solid var(--borda); color: var(--suave); font-size: 13px;
+}
+.filtros a.ativo { background: var(--marca); border-color: var(--marca); color: #fff; font-weight: 600; }
+
+.achado {
+  background: #fffbeb; border: 1px solid #fde68a; border-left: 4px solid var(--atencao);
+  border-radius: var(--raio); padding: 14px 18px; margin-bottom: 16px;
+}
+.achado strong { display: block; margin-bottom: 4px; }
+.achado p { margin: 0; font-size: 14px; color: #713f12; }
+
+/* ---------- login ---------- */
+
+.tela-login {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 100vh; padding: 20px;
+  background: linear-gradient(140deg, #1e293b, #334155);
+}
+.cartao-login {
+  background: var(--papel); border-radius: 16px; padding: 32px;
+  width: 100%; max-width: 480px; box-shadow: 0 20px 50px rgba(0,0,0,.3);
+}
+.cartao-login h1 { margin: 0 0 4px; font-size: 22px; }
+.cartao-login .sub { margin: 0 0 22px; color: var(--suave); font-size: 14px; }
+.cartao-login label { display: block; margin-bottom: 14px; font-size: 13px; font-weight: 600; color: var(--suave); }
+.cartao-login input {
+  width: 100%; margin-top: 6px; padding: 11px 12px;
+  border: 1px solid var(--borda); border-radius: 8px; font-size: 15px; font-weight: 400; color: var(--texto);
+}
+.cartao-login input:focus { outline: 2px solid var(--marca); outline-offset: -1px; border-color: transparent; }
+.cartao-login button {
+  width: 100%; padding: 12px; border: 0; border-radius: 8px;
+  background: var(--marca); color: #fff; font-size: 15px; font-weight: 600; cursor: pointer;
+}
+.cartao-login button:hover { filter: brightness(.93); }
+.erro { background: #fee2e2; color: #991b1b; padding: 10px 12px; border-radius: 8px; margin-bottom: 16px; font-size: 14px; }
+.demo { margin-top: 22px; font-size: 13px; }
+.demo summary { cursor: pointer; color: var(--suave); font-weight: 600; }
+.demo table { margin-top: 12px; }
+.demo td, .demo th { padding: 6px 8px; font-size: 12.5px; }
+.demo code { background: #f1f5f9; padding: 1px 6px; border-radius: 4px; }
+.demo .nota { color: var(--suave); margin-top: 10px; line-height: 1.5; }
