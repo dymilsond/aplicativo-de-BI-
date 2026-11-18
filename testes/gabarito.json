@@ -1,0 +1,82 @@
+{
+  "padaria": {
+    "total_receita": 4542788.43,
+    "total_cupons": 374170,
+    "cupons_distintos_na_base": 163425,
+    "por_categoria": {
+      "Panificação": 2641326.99,
+      "Salgados": 661642.7,
+      "Confeitaria": 439301.45,
+      "Mercearia": 215906.84,
+      "Cafeteria": 584610.45
+    },
+    "unidade_teste": "Matriz - Centro",
+    "receita_da_unidade": 2772618.47,
+    "periodo": {
+      "de": "2024-11-01",
+      "ate": "2025-01-29",
+      "receita": 460381.74
+    },
+    "cruzada": {
+      "unidade": "Matriz - Centro",
+      "categoria": "Panificação",
+      "receita": 1611599.37
+    }
+  },
+  "supermercado": {
+    "total_receita": 28884703.82,
+    "total_cupons": 1586160,
+    "cupons_distintos_na_base": 214769,
+    "por_categoria": {
+      "Mercearia": 5165138.7,
+      "Hortifruti": 2532171.57,
+      "Congelados": 1729324.06,
+      "Limpeza": 1198639.85,
+      "Frios e Laticínios": 4714499.54,
+      "Padaria": 2818687.29,
+      "Higiene": 2138162.86,
+      "Bebidas": 1633137.84,
+      "Açougue": 6954942.11
+    },
+    "unidade_teste": "Loja 01 - Centro",
+    "receita_da_unidade": 12399649.37,
+    "periodo": {
+      "de": "2024-11-01",
+      "ate": "2025-01-29",
+      "receita": 2938723.0
+    },
+    "cruzada": {
+      "unidade": "Loja 01 - Centro",
+      "categoria": "Açougue",
+      "receita": 2980262.66
+    }
+  },
+  "farmacia": {
+    "total_receita": 12433917.12,
+    "total_cupons": 428238,
+    "cupons_distintos_na_base": 150268,
+    "por_categoria": {
+      "OTC": 1384727.47,
+      "Suplemento": 1591870.45,
+      "Medicamento Genérico": 2201954.8,
+      "Infantil": 2007143.42,
+      "Higiene": 512850.84,
+      "Equipamento": 983497.82,
+      "Controlado": 904336.12,
+      "Dermocosmético": 1568454.66,
+      "Medicamento Referência": 1279081.54
+    },
+    "unidade_teste": "Unidade Centro",
+    "receita_da_unidade": 7278159.46,
+    "periodo": {
+      "de": "2024-11-01",
+      "ate": "2025-01-29",
+      "receita": 933262.01
+    },
+    "cruzada": {
+      "unidade": "Unidade Centro",
+      "categoria": "Medicamento Genérico",
+      "receita": 1287136.1
+    }
+  }
+}
