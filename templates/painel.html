@@ -98,7 +98,7 @@
 
 {% block scripts %}
 <script type="module">
-  import { iniciar } from '/estatico/painel.js';
+  import { iniciar } from '/estatico/painel.js?v={{ v }}';
   iniciar().catch((e) => {
     document.getElementById('carregando').innerHTML =
       '<strong>Não foi possível carregar o cubo.</strong><br>' + e.message;

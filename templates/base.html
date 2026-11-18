@@ -4,10 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block titulo %}{{ negocio.nome }}{% endblock %}</title>
-  <link rel="icon" href="/estatico/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/estatico/estilo.css">
-  <script src="/estatico/echarts.min.js"></script>
-  <script src="/estatico/htmx.min.js" defer></script>
+  <link rel="icon" href="/estatico/favicon.svg?v={{ v }}" type="image/svg+xml">
+  <link rel="stylesheet" href="/estatico/estilo.css?v={{ v }}">
+  <script src="/estatico/echarts.min.js?v={{ v }}"></script>
+  <script src="/estatico/htmx.min.js?v={{ v }}" defer></script>
   <style>:root { --marca: {{ negocio.cor }}; }</style>
 </head>
 <body>

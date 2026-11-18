@@ -29,8 +29,46 @@ templates = Jinja2Templates(directory=str(RAIZ / "templates"))
 # Disponível em qualquer template, sem precisar passar no contexto.
 templates.env.globals["mes_longo"] = mes_longo
 
+
+def _versao_estatico() -> str:
+    """Carimbo que muda quando qualquer arquivo de `estatico/` muda.
+
+    Sem isso, o navegador segura o CSS antigo depois de um `git pull` e a
+    tela aparece com o HTML novo e o estilo velho — que é indistinguível de
+    "não atualizou". Aconteceu de verdade: o log mostrava
+    `GET /estatico/estilo.css 304 Not Modified` e a pessoa via a tela crua.
+
+    Mesmo padrão do painel de Gestão de Pessoas do Cade
+    (`style.css?v=20261105-1700`), só que calculado em vez de escrito à mão —
+    carimbo escrito à mão é carimbo que alguém esquece de trocar.
+    """
+    pasta = RAIZ / "app" / "estatico"
+    try:
+        recente = max(f.stat().st_mtime for f in pasta.iterdir() if f.is_file())
+    except (OSError, ValueError):
+        return "0"
+    return str(int(recente))
+
+
+templates.env.globals["v"] = _versao_estatico()
+
 app = FastAPI(title="BI para o seu negócio", docs_url=None, redoc_url=None)
-app.mount("/estatico", StaticFiles(directory=str(RAIZ / "app" / "estatico")), name="estatico")
+class EstaticoSemCacheTeimoso(StaticFiles):
+    """Serve `estatico/` pedindo revalidação a cada carga.
+
+    O `?v=` resolve o CSS e o `painel.js`, mas `motor.js` entra por `import`
+    de dentro do `painel.js` e não passa pelo template — não tem como
+    carimbar. `no-cache` obriga o navegador a perguntar ao servidor se mudou
+    (resposta 304 continua barata) em vez de usar a cópia dele às cegas.
+    """
+
+    def file_response(self, *args, **kwargs):
+        resposta = super().file_response(*args, **kwargs)
+        resposta.headers["Cache-Control"] = "no-cache"
+        return resposta
+
+
+app.mount("/estatico", EstaticoSemCacheTeimoso(directory=str(RAIZ / "app" / "estatico")), name="estatico")
 
 
 # ---------------------------------------------------------------------------
