@@ -156,6 +156,27 @@ def sair():
 
 
 @app.get("/", response_class=HTMLResponse)
+def raiz(request: Request, usuario: Usuario = Depends(usuario_logado)):
+    """A porta de entrada é o painel associativo.
+
+    Antes a raiz era a tela 'Hoje', estática, e o painel era o sexto item do
+    menu. Quem abria o aplicativo caía numa tela velha e concluía, com razão,
+    que nada tinha mudado. A tela que representa o produto é a primeira que
+    aparece.
+    """
+    return templates.TemplateResponse(
+        request=request, name="painel.html",
+        context=_contexto(request, usuario, "painel"),
+    )
+
+
+@app.get("/painel", response_class=HTMLResponse)
+def painel_apelido(request: Request, usuario: Usuario = Depends(usuario_logado)):
+    """Apelido da raiz: link antigo continua funcionando."""
+    return raiz(request, usuario)
+
+
+@app.get("/hoje", response_class=HTMLResponse)
 def hoje(request: Request, usuario: Usuario = Depends(usuario_logado)):
     kpis = consultas.kpis_de_hoje(usuario)
     mes = consultas.kpis_do_mes(usuario)
@@ -333,15 +354,6 @@ def servir_cubo(arquivo: str, usuario: Usuario = Depends(usuario_logado)):
         )
     tipo = "application/json" if arquivo.endswith(".json") else "application/octet-stream"
     return FileResponse(destino, media_type=tipo, headers={"Cache-Control": "no-store"})
-
-
-@app.get("/painel", response_class=HTMLResponse)
-def painel(request: Request, usuario: Usuario = Depends(usuario_logado)):
-    """Painel associativo: tudo clica, tudo responde."""
-    return templates.TemplateResponse(
-        request=request, name="painel.html",
-        context=_contexto(request, usuario, "painel"),
-    )
 
 
 @app.get("/saude")
