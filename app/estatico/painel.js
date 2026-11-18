@@ -35,10 +35,49 @@ const ROTULO_DIM = {
   categoria: 'Categoria',
   produto: 'Produto',
   forma_pagamento: 'Forma de pagamento',
+  hora: 'Hora do dia',
+  dia_semana: 'Dia da semana',
 };
 
 let M = null;             // o motor
 let medida = 'receita';   // medida corrente dos gráficos
+
+/* As medidas que a tela oferece. `margem` não existe no cubo: é derivada
+   (receita − custo). Sem isso, o cartão "Lucro bruto" trocava os gráficos
+   para **custo** e rotulava como lucro — número errado com nome certo, que
+   é o pior tipo de erro num painel. */
+const MEDIDAS = {
+  receita:    { rotulo: 'Faturamento',   dinheiro: true },
+  margem:     { rotulo: 'Lucro bruto',   dinheiro: true, derivada: ['receita', 'custo'] },
+  cupons:     { rotulo: 'Atendimentos',  dinheiro: false },
+  quantidade: { rotulo: 'Itens',         dinheiro: false },
+};
+
+/** Formata conforme a medida: dinheiro leva R$, contagem não. */
+const valorDaMedida = (v) => (MEDIDAS[medida].dinheiro ? curto(v) : num(v, 0));
+
+/** `porDimensao` ciente de medida derivada. */
+function porDim(dim, excluindoPropria) {
+  const def = MEDIDAS[medida];
+  if (!def.derivada) return M.porDimensao(dim, medida, excluindoPropria);
+  const [a, b] = def.derivada;
+  const x = M.porDimensao(dim, a, excluindoPropria);
+  const y = M.porDimensao(dim, b, excluindoPropria);
+  const fora = new Float64Array(x.length);
+  for (let i = 0; i < x.length; i++) fora[i] = x[i] - y[i];
+  return fora;
+}
+
+/** `estado` ciente de medida derivada, preservando o tri-estado. */
+function estadoDim(dim) {
+  const def = MEDIDAS[medida];
+  if (!def.derivada) return M.estado(dim, medida);
+  const valores = porDim(dim, true);
+  // O que é "possível" não depende da medida — depende de haver linha viva.
+  // Uso a receita para decidir existência e a margem só para o valor.
+  const base = M.estado(dim, 'receita');
+  return base.map((x) => ({ ...x, valor: valores[x.codigo] }));
+}
 let periodo = 'tudo';
 
 /* ------------------------------------------------------------------ */
@@ -53,6 +92,12 @@ const PERIODOS = [
 ];
 
 function aplicarPeriodo() {
+  if (mesEscolhido) {
+    const ini = new Date(mesEscolhido.ano, mesEscolhido.mes, 1);
+    const fim = new Date(mesEscolhido.ano, mesEscolhido.mes + 1, 0);
+    M.periodoPorDia(M.diaDaData(ini), M.diaDaData(fim));
+    return;
+  }
   const def = PERIODOS.find((p) => p[0] === periodo);
   const fim = M.ultimoDia;
   M.periodoPorDia(def[2] === null ? 0 : Math.max(0, fim - def[2] + 1), fim);
@@ -65,9 +110,15 @@ function aplicarPeriodo() {
 function desenharChips() {
   const sels = M.selecoes();
   const box = $('chips');
-  box.hidden = !sels.length;
-  if (!sels.length) { box.innerHTML = ''; return; }
-  box.innerHTML = sels.map((s) => `
+  const temMes = !!mesEscolhido;
+  box.hidden = !sels.length && !temMes;
+  if (box.hidden) { box.innerHTML = ''; return; }
+  const chipMes = temMes ? `
+    <span class="chip">
+      <b>Mês:</b> ${esc(mesEscolhido.rotulo)}
+      <button type="button" data-limpar="@mes" aria-label="Remover o mês">✕</button>
+    </span>` : '';
+  box.innerHTML = chipMes + sels.map((s) => `
     <span class="chip">
       <b>${esc(ROTULO_DIM[s.dim] || s.dim)}:</b>
       ${esc(s.rotulos.length > 2 ? s.rotulos.length + ' selecionados' : s.rotulos.join(', '))}
@@ -87,18 +138,23 @@ function desenharIndicadores() {
   const qtd = M.total('quantidade');
   const margem = receita - custo;
 
-  const cartao = (rotulo, valor, nota, destaque) => `
-    <div class="ind-cartao${destaque ? ' destaque' : ''}">
+  // O cartão também é botão: clicar nele troca a medida que todos os
+  // gráficos mostram. Era o único bloco da tela que exibia número e não
+  // respondia a nada.
+  const cartao = (rotulo, valor, nota, qualMedida) => `
+    <button type="button" class="ind-cartao${qualMedida === medida ? ' ativo' : ''}"
+            ${qualMedida ? `data-medida="${qualMedida}"` : ''}
+            title="${qualMedida ? 'Mostrar ' + rotulo.toLowerCase() + ' nos gráficos' : ''}">
       <span class="ind-rot">${esc(rotulo)}</span>
       <span class="ind-num">${valor}</span>
       <span class="ind-nota">${nota}</span>
-    </div>`;
+    </button>`;
 
   $('indicadores').innerHTML =
-    cartao('Faturamento', curto(receita), `${num(M.linhasAtivas())} combinações no filtro`, true) +
-    cartao('Lucro bruto', curto(margem), `${pct(margem, receita)} do faturamento`) +
-    cartao('Atendimentos', num(cupons), `ticket médio ${cupons ? brl(receita / cupons) : '–'}`) +
-    cartao('Itens vendidos', num(qtd, 0), `${cupons ? num(qtd / cupons, 1) : '–'} itens por atendimento`);
+    cartao('Faturamento', curto(receita), `${num(M.linhasAtivas())} combinações no filtro`, 'receita') +
+    cartao('Lucro bruto', curto(margem), `${pct(margem, receita)} do faturamento`, 'margem') +
+    cartao('Atendimentos', num(cupons), `ticket médio ${cupons ? brl(receita / cupons) : '–'}`, 'cupons') +
+    cartao('Itens vendidos', num(qtd, 0), `${cupons ? num(qtd / cupons, 1) : '–'} itens por atendimento`, 'quantidade');
 }
 
 /* ------------------------------------------------------------------ */
@@ -106,7 +162,7 @@ function desenharIndicadores() {
 /* ------------------------------------------------------------------ */
 
 function desenharBarras(id, dim, opcoes = {}) {
-  const itens = M.estado(dim, medida)
+  const itens = estadoDim(dim)
     .sort((a, b) => b.valor - a.valor || a.rotulo.localeCompare(b.rotulo, 'pt-BR'));
   const limite = opcoes.limite || itens.length;
   const mostra = itens.slice(0, limite);
@@ -117,10 +173,10 @@ function desenharBarras(id, dim, opcoes = {}) {
   $(id).innerHTML = mostra.map((x) => `
     <button type="button" class="barra ${x.estado}${temSel && x.estado === 'possivel' ? ' apagada' : ''}"
             data-dim="${esc(dim)}" data-cod="${x.codigo}"
-            title="${esc(x.rotulo)}: ${curto(x.valor)} (${pct(x.valor, total)})${x.estado === 'excluido' ? ' — fora da seleção atual' : ''}">
+            title="${esc(x.rotulo)}: ${valorDaMedida(x.valor)} (${pct(x.valor, total)})${x.estado === 'excluido' ? ' — fora da seleção atual' : ''}">
       <span class="barra-nome">${esc(x.rotulo)}</span>
       <span class="barra-trilho"><span class="barra-preenchida" style="width:${(100 * x.valor / max).toFixed(1)}%"></span></span>
-      <span class="barra-valor">${x.estado === 'excluido' ? '—' : curto(x.valor)}</span>
+      <span class="barra-valor">${x.estado === 'excluido' ? '—' : valorDaMedida(x.valor)}</span>
     </button>`).join('');
 
   if (opcoes.contador) {
@@ -138,7 +194,7 @@ function desenharBarras(id, dim, opcoes = {}) {
 const CORES = ['#1351b4', '#e07b00', '#168821', '#c2185b', '#7a4fb5', '#0c7a8a', '#8a6d3b', '#4b5563'];
 
 function desenharRosca(id, dim) {
-  const itens = M.estado(dim, medida).sort((a, b) => b.valor - a.valor);
+  const itens = estadoDim(dim).sort((a, b) => b.valor - a.valor);
   const vivos = itens.filter((x) => x.valor > 0);
   const total = vivos.reduce((s, x) => s + x.valor, 0);
   const temSel = itens.some((x) => x.estado === 'selecionado');
@@ -168,7 +224,7 @@ function desenharRosca(id, dim) {
   $(id).innerHTML = `<div class="rosca-wrap">
     <svg viewBox="0 0 160 160" role="img" aria-label="${esc(ROTULO_DIM[dim])}">
       ${total ? arcos : '<circle cx="80" cy="80" r="58" fill="none" stroke="#e5e7eb" stroke-width="22"/>'}
-      <text x="80" y="76" text-anchor="middle" class="rosca-num">${curto(total)}</text>
+      <text x="80" y="76" text-anchor="middle" class="rosca-num">${valorDaMedida(total)}</text>
       <text x="80" y="95" text-anchor="middle" class="rosca-sub">no filtro</text>
     </svg><div class="legenda">${legenda}</div></div>`;
 }
@@ -177,10 +233,24 @@ function desenharRosca(id, dim) {
 /* Evolução mensal — clicável                                          */
 /* ------------------------------------------------------------------ */
 
-let mesesSel = new Set();   // chave "aaaa-mm" dos meses clicados
+// Mês escolhido clicando no gráfico de evolução. Não é dimensão do cubo:
+// é um recorte de período, então vira fatia de linhas como qualquer período.
+let mesEscolhido = null;   // { ano, mes, rotulo } ou null
 
 function desenharEvolucao() {
-  const { dias, soma } = M.porDia(medida);
+  // A linha mostra o histórico inteiro mesmo com um mês escolhido: senão,
+  // clicar num ponto reduziria o gráfico a esse ponto e não haveria como
+  // voltar clicando. O mês escolhido aparece destacado, não isolado.
+  const deAntes = M.de, ateAntes = M.ate;
+  if (mesEscolhido) M.periodoPorDia(0, M.ultimoDia);
+  const def = MEDIDAS[medida];
+  const { dias, soma } = def.derivada
+    ? (() => {
+        const a = M.porDia(def.derivada[0]), b = M.porDia(def.derivada[1]);
+        return { dias: a.dias, soma: a.soma.map((v, i) => v - b.soma[i]) };
+      })()
+    : M.porDia(medida);
+  M.de = deAntes; M.ate = ateAntes;
   const porMes = new Map();
   dias.forEach((d, k) => {
     const data = new Date(M.origem.getTime() + d * 86400000);
@@ -207,7 +277,7 @@ function desenharEvolucao() {
     }
   }
   $('evo-nota').textContent = parcial
-    ? `${parcial.rotulo} está em andamento (${curto(parcial.valor)} até agora) e fica fora da linha`
+    ? `${parcial.rotulo} está em andamento (${valorDaMedida(parcial.valor)} até agora) e fica fora da linha`
     : '';
 
   if (!pontos.length) { $('evolucao').innerHTML = '<p class="vazio">Sem dado no período.</p>'; return; }
@@ -223,7 +293,7 @@ function desenharEvolucao() {
   for (let k = 0; k <= 4; k++) {
     const v = topo * k / 4;
     g += `<line class="grade" x1="${ml}" x2="${L - mr}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"/>
-          <text class="eixo" x="${ml - 8}" y="${(Y(v) + 4).toFixed(1)}" text-anchor="end">${curto(v)}</text>`;
+          <text class="eixo" x="${ml - 8}" y="${(Y(v) + 4).toFixed(1)}" text-anchor="end">${valorDaMedida(v)}</text>`;
   }
   const linha = pontos.map((p, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(p.valor).toFixed(1)).join(' ');
   g += `<path d="${linha} L${X(pontos.length - 1).toFixed(1)} ${Y(0).toFixed(1)} L${X(0).toFixed(1)} ${Y(0).toFixed(1)} Z" class="area"/>`;
@@ -231,13 +301,15 @@ function desenharEvolucao() {
 
   const pular = pontos.length > 16 ? Math.ceil(pontos.length / 14) : 1;
   pontos.forEach((p, i) => {
-    const sel = mesesSel.has(p.chave), x = X(i), y = Y(p.valor);
+    const sel = !!mesEscolhido && mesEscolhido.ano === p.ano && mesEscolhido.mes === p.mes;
+    const x = X(i), y = Y(p.valor);
     if (i % pular === 0 || sel) {
       g += `<text class="eixo${sel ? ' forte' : ''}" x="${x.toFixed(1)}" y="${A - 12}" text-anchor="middle">${p.rotulo}</text>`;
     }
     g += `<circle class="ponto${sel ? ' sel' : ''}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${sel ? 6 : 3.5}"/>`;
-    g += `<circle class="alvo" data-mes="${p.chave}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="14" fill="transparent">
-            <title>${p.rotulo}: ${brl(p.valor)}</title></circle>`;
+    g += `<circle class="alvo" data-ano="${p.ano}" data-mes="${p.mes}" data-rot="${p.rotulo}"
+            cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="14" fill="transparent">
+            <title>${p.rotulo}: ${MEDIDAS[medida].dinheiro ? brl(p.valor) : num(p.valor, 0)} — clique para ver só este mês</title></circle>`;
   });
 
   $('evolucao').innerHTML = `<svg viewBox="0 0 ${L} ${A}" role="img" aria-label="Evolução mensal">${g}</svg>`;
@@ -248,39 +320,32 @@ function desenharEvolucao() {
 /* ------------------------------------------------------------------ */
 
 function desenharHoras() {
-  const hd = M.blocos.h_data, hh = M.blocos.h_hora, hr = M.blocos.h_receita;
-  const porHora = new Float64Array(24);
-  // Só o período: a seleção de produto não se aplica a este cubo, que não
-  // tem a dimensão produto. Fica explícito na legenda da tela.
-  const diaDe = M.data[M.de], diaAte = M.ate > 0 ? M.data[M.ate - 1] : 0;
-  for (let i = 0; i < hd.length; i++) {
-    if (hd[i] < diaDe || hd[i] > diaAte) continue;
-    porHora[hh[i]] += hr[i] / 100;
-  }
-  const horas = [...porHora.keys()].filter((h) => porHora[h] > 0);
-  if (!horas.length) { $('horas').innerHTML = '<p class="vazio">Sem dado.</p>'; return; }
-  const max = Math.max(...porHora);
-  $('horas').innerHTML = `<div class="colunas-hora">` + horas.map((h) => `
-    <div class="col-hora" title="${h}h: ${curto(porHora[h])}">
-      <span class="col-barra" style="height:${(100 * porHora[h] / max).toFixed(1)}%"></span>
-      <span class="col-rot">${h}h</span>
-    </div>`).join('') + '</div>';
+  const itens = estadoDim('hora').sort((a, b) => Number(a.rotulo) - Number(b.rotulo));
+  const max = Math.max(1, ...itens.map((x) => x.valor));
+  const temSel = itens.some((x) => x.estado === 'selecionado');
+  $('horas').innerHTML = `<div class="colunas-hora">` + itens.map((x) => `
+    <button type="button" class="col-hora ${x.estado}${temSel && x.estado === 'possivel' ? ' apagada' : ''}"
+            data-dim="hora" data-cod="${x.codigo}"
+            title="${x.rotulo}h: ${valorDaMedida(x.valor)}${x.estado === 'excluido' ? ' — fora da seleção' : ''}">
+      <span class="col-barra" style="height:${(100 * x.valor / max).toFixed(1)}%"></span>
+      <span class="col-rot">${x.rotulo}h</span>
+    </button>`).join('') + '</div>';
 }
 
+const ORDEM_SEMANA = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+
 function desenharSemana() {
-  const { dias, soma } = M.porDia(medida);
-  const acc = new Float64Array(7), cont = new Float64Array(7);
-  dias.forEach((d, k) => {
-    const dw = new Date(M.origem.getTime() + d * 86400000).getDay();
-    acc[dw] += soma[k]; cont[dw]++;
-  });
-  const media = [...acc.keys()].map((i) => (cont[i] ? acc[i] / cont[i] : 0));
-  const max = Math.max(1, ...media);
-  $('semana').innerHTML = SEMANA.map((nome, i) => `
-    <button type="button" class="barra possivel" title="${nome}: ${curto(media[i])} em média">
-      <span class="barra-nome">${nome}</span>
-      <span class="barra-trilho"><span class="barra-preenchida" style="width:${(100 * media[i] / max).toFixed(1)}%"></span></span>
-      <span class="barra-valor">${curto(media[i])}</span>
+  const itens = estadoDim('dia_semana')
+    .sort((a, b) => ORDEM_SEMANA.indexOf(a.rotulo) - ORDEM_SEMANA.indexOf(b.rotulo));
+  const max = Math.max(1, ...itens.map((x) => x.valor));
+  const temSel = itens.some((x) => x.estado === 'selecionado');
+  $('semana').innerHTML = itens.map((x) => `
+    <button type="button" class="barra ${x.estado}${temSel && x.estado === 'possivel' ? ' apagada' : ''}"
+            data-dim="dia_semana" data-cod="${x.codigo}"
+            title="${esc(x.rotulo)}: ${valorDaMedida(x.valor)}">
+      <span class="barra-nome">${esc(x.rotulo)}</span>
+      <span class="barra-trilho"><span class="barra-preenchida" style="width:${(100 * x.valor / max).toFixed(1)}%"></span></span>
+      <span class="barra-valor">${x.estado === 'excluido' ? '—' : valorDaMedida(x.valor)}</span>
     </button>`).join('');
 }
 
@@ -344,16 +409,27 @@ function ligarEventos() {
       render();
       return;
     }
+    const ponto = e.target.closest('.alvo[data-ano]');
+    if (ponto) {
+      const ano = Number(ponto.dataset.ano), mes = Number(ponto.dataset.mes);
+      const igual = mesEscolhido && mesEscolhido.ano === ano && mesEscolhido.mes === mes;
+      mesEscolhido = igual ? null : { ano, mes, rotulo: ponto.dataset.rot };
+      render();
+      return;
+    }
     const limpar = e.target.closest('[data-limpar]');
     if (limpar) {
       const d = limpar.dataset.limpar;
-      if (d === '*') { M.limpar(); mesesSel.clear(); } else M.limpar(d);
+      if (d === '*') { M.limpar(); mesEscolhido = null; }
+      else if (d === '@mes') mesEscolhido = null;
+      else M.limpar(d);
       render();
       return;
     }
     const per = e.target.closest('[data-periodo]');
     if (per) {
       periodo = per.dataset.periodo;
+      mesEscolhido = null;   // escolher período na barra manda no gráfico
       document.querySelectorAll('[data-periodo]').forEach((b) =>
         b.setAttribute('aria-pressed', String(b.dataset.periodo === periodo)));
       render();
@@ -362,8 +438,10 @@ function ligarEventos() {
     const med = e.target.closest('[data-medida]');
     if (med) {
       medida = med.dataset.medida;
-      document.querySelectorAll('[data-medida]').forEach((b) =>
-        b.setAttribute('aria-pressed', String(b.dataset.medida === medida)));
+      document.querySelectorAll('[data-medida]').forEach((b) => {
+        b.setAttribute('aria-pressed', String(b.dataset.medida === medida));
+        b.classList.toggle('ativo', b.dataset.medida === medida);
+      });
       render();
     }
   });

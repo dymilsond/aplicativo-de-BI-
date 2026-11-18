@@ -30,11 +30,19 @@ def do_negocio(negocio: str) -> dict:
     # O cubo agrega cupons dentro de cada combinação de dimensões, então o
     # total de cupons do motor é a SOMA desses contadores, não a contagem
     # distinta global. É o que o teste precisa comparar.
+    # O grão tem que ser o MESMO do cubo (chassi.cubo.DIMENSOES_VENDA), senão
+    # o gabarito mede outra coisa. Importar de lá evita os dois saírem de
+    # sincronia em silêncio — foi o que quebrou quando `hora` entrou.
+    from chassi.cubo import DIMENSOES_VENDA
+
+    grao = ", ".join(
+        "dayofweek(data)" if d == "dia_semana" else d for d in DIMENSOES_VENDA
+    )
     cupons_do_cubo = con.execute(
-        """
+        f"""
         SELECT sum(c) FROM (
           SELECT count(DISTINCT cupom) AS c FROM venda
-          GROUP BY data, unidade, categoria, produto, forma_pagamento)
+          GROUP BY data, {grao})
         """
     ).fetchone()[0]
 

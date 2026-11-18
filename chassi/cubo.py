@@ -35,7 +35,22 @@ from pathlib import Path
 import duckdb
 
 #: Dimensões do cubo de venda, na ordem em que viram colunas.
-DIMENSOES_VENDA = ("unidade", "categoria", "produto", "forma_pagamento")
+#:
+#: `hora` e `dia_semana` entraram para que **toda** marca da tela seja
+#: clicável — regra do produto: o que mostra número, filtra.
+#:
+#: A hora custa: ela multiplica as linhas por ~4 (supermercado vai de 298 mil
+#: para 1,26 milhão, e o arquivo servido de 2,33 MB para 7,67 MB com gzip).
+#: Medido, não estimado. Se um dia o peso incomodar — cliente em 4G, por
+#: exemplo — tirar "hora" desta tupla reverte tudo: o motor e a tela são
+#: genéricos sobre as dimensões e se ajustam sozinhos.
+#:
+#: `dia_semana` é praticamente de graça: 1 byte por linha, e tão repetitivo
+#: que o gzip o reduz a quase nada.
+DIMENSOES_VENDA = ("unidade", "categoria", "produto", "forma_pagamento", "hora", "dia_semana")
+
+#: Rótulos legíveis para as dimensões derivadas da data.
+DIAS_DA_SEMANA = ("Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado")
 #: Medidas somáveis do cubo de venda, com a escala em que viajam.
 #:
 #: Dinheiro vai em **centavos inteiros**, e quantidade em centésimos. Não é só
@@ -108,7 +123,15 @@ def montar(caminho_banco: Path, destino: Path, unidades: tuple[str, ...] | None 
     else:
         filtro, p_unid = "", []
 
-    dims = ", ".join(DIMENSOES_VENDA)
+    # `hora` vem da tabela; `dia_semana` é derivada aqui, para a tela poder
+    # filtrar por "todos os sábados" sem o motor precisar saber o que é data.
+    expressoes = {
+        "dia_semana": "CASE dayofweek(data) "
+        + " ".join(f"WHEN {i} THEN '{n}'" for i, n in enumerate(DIAS_DA_SEMANA))
+        + " END",
+    }
+    dims = ", ".join(expressoes.get(d, d) + f" AS {d}" for d in DIMENSOES_VENDA)
+    agrupamento = ", ".join(expressoes.get(d, d) for d in DIMENSOES_VENDA)
     linhas = con.execute(
         f"""
         SELECT data, {dims},
@@ -118,7 +141,7 @@ def montar(caminho_banco: Path, destino: Path, unidades: tuple[str, ...] | None 
                count(DISTINCT cupom)  AS cupons
         FROM venda
         {filtro}
-        GROUP BY data, {dims}
+        GROUP BY data, {agrupamento}
         ORDER BY data            -- período vira fatia contígua; ver docstring
         """,
         p_unid,
@@ -173,29 +196,6 @@ def montar(caminho_banco: Path, destino: Path, unidades: tuple[str, ...] | None 
         cabecalho["medidas"].append({"nome": nome, "escala": escala})
         largura = 2 if formato == "H" else 4
         acrescentar(nome, struct.pack(f"<{n}{formato}", *valores), f"u{largura * 8}")
-
-    # Cubo da hora: pequeno o bastante para ir inteiro, sem dimensão de produto.
-    hora = con.execute(
-        f"""
-        SELECT data, hora, unidade, sum(receita) AS receita, count(DISTINCT cupom) AS cupons
-        FROM venda {filtro} GROUP BY data, hora, unidade ORDER BY data
-        """,
-        p_unid,
-    ).fetchall()
-    cabecalho["hora"] = {
-        "linhas": len(hora),
-        "unidades": sorted({l[2] for l in hora}),
-    }
-    uni_idx = {u: i for i, u in enumerate(cabecalho["hora"]["unidades"])}
-    acrescentar("h_data", _dias_desde([l[0] for l in hora], origem), "u16")
-    acrescentar("h_hora", struct.pack(f"<{len(hora)}B", *(l[1] for l in hora)), "u8")
-    acrescentar("h_unidade", struct.pack(f"<{len(hora)}B", *(uni_idx[l[2]] for l in hora)), "u8")
-    acrescentar(
-        "h_receita",
-        struct.pack(f"<{len(hora)}I", *(round(float(l[3]) * 100) for l in hora)),
-        "u32",
-    )
-    acrescentar("h_cupons", struct.pack(f"<{len(hora)}I", *(int(l[4]) for l in hora)), "u32")
 
     con.close()
 

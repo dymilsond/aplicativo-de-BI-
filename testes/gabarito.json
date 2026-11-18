@@ -4,11 +4,11 @@
     "total_cupons": 374170,
     "cupons_distintos_na_base": 163425,
     "por_categoria": {
-      "Panificação": 2641326.99,
-      "Salgados": 661642.7,
       "Confeitaria": 439301.45,
       "Mercearia": 215906.84,
-      "Cafeteria": 584610.45
+      "Cafeteria": 584610.45,
+      "Panificação": 2641326.99,
+      "Salgados": 661642.7
     },
     "unidade_teste": "Matriz - Centro",
     "receita_da_unidade": 2772618.47,
@@ -31,12 +31,12 @@
       "Mercearia": 5165138.7,
       "Hortifruti": 2532171.57,
       "Congelados": 1729324.06,
-      "Limpeza": 1198639.85,
-      "Frios e Laticínios": 4714499.54,
-      "Padaria": 2818687.29,
       "Higiene": 2138162.86,
       "Bebidas": 1633137.84,
-      "Açougue": 6954942.11
+      "Açougue": 6954942.11,
+      "Limpeza": 1198639.85,
+      "Frios e Laticínios": 4714499.54,
+      "Padaria": 2818687.29
     },
     "unidade_teste": "Loja 01 - Centro",
     "receita_da_unidade": 12399649.37,
@@ -56,15 +56,15 @@
     "total_cupons": 428238,
     "cupons_distintos_na_base": 150268,
     "por_categoria": {
-      "OTC": 1384727.47,
       "Suplemento": 1591870.45,
+      "OTC": 1384727.47,
       "Medicamento Genérico": 2201954.8,
       "Infantil": 2007143.42,
       "Higiene": 512850.84,
-      "Equipamento": 983497.82,
       "Controlado": 904336.12,
-      "Dermocosmético": 1568454.66,
-      "Medicamento Referência": 1279081.54
+      "Equipamento": 983497.82,
+      "Medicamento Referência": 1279081.54,
+      "Dermocosmético": 1568454.66
     },
     "unidade_teste": "Unidade Centro",
     "receita_da_unidade": 7278159.46,

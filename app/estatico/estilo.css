@@ -293,3 +293,19 @@ tbody tr:hover { background: #f8fafc; }
 
 .nota-dado { font-size: 12.5px; color: var(--suave); text-align: center; padding: 8px 0 4px; }
 .vazio { color: var(--suave); padding: 20px 0; text-align: center; }
+
+/* indicador virou botão: troca a medida dos gráficos */
+.ind-cartao { cursor: pointer; text-align: left; width: 100%; font: inherit; color: inherit; transition: border-color .15s ease; }
+.ind-cartao:hover { border-color: var(--marca); }
+.ind-cartao.ativo { border-left: 4px solid var(--marca); background: #f8fbff; }
+.ind-cartao.ativo .ind-rot { color: var(--marca); font-weight: 700; }
+
+/* coluna de hora: agora clica e tem tri-estado */
+.col-hora { background: transparent; border: 0; padding: 0; cursor: pointer; font: inherit; }
+.col-hora:hover .col-barra { filter: brightness(1.15); }
+.col-hora.selecionado .col-barra { outline: 2px solid var(--texto); outline-offset: 1px; }
+.col-hora.selecionado .col-rot { font-weight: 700; color: var(--marca); }
+.col-hora.apagada .col-barra { opacity: .4; }
+.col-hora.excluido { cursor: default; }
+.col-hora.excluido .col-barra { background: repeating-linear-gradient(45deg, #e5e7eb 0 4px, #eef0f3 4px 8px); min-height: 6px; }
+.col-hora.excluido .col-rot { color: #b6bdc7; }

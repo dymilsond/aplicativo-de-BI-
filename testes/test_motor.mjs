@@ -31,7 +31,8 @@ function igual(a, b, o) {
 }
 
 function carregar(negocio) {
-  const base = join(RAIZ, 'dados', 'cubo', negocio);
+  // Cada perfil de acesso tem o seu cubo; o teste usa o de quem vê tudo.
+  const base = join(RAIZ, 'dados', 'cubo', negocio, 'todas');
   const cab = JSON.parse(readFileSync(join(base, 'cubo.json'), 'utf8'));
   const bin = readFileSync(join(base, 'cubo.bin'));
   // Node devolve Buffer; o motor quer ArrayBuffer.
