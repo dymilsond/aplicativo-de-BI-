@@ -39,6 +39,62 @@ const ROTULO_DIM = {
   dia_semana: 'Dia da semana',
 };
 
+/* ------------------------------------------------------------------ */
+/* ZOOM — o que acontece com o gráfico quando você seleciona            */
+/* ------------------------------------------------------------------ */
+/*
+ *  No Qlik, selecionar um mês não dá zoom: dá FILTRO. Os outros meses
+ *  deixam de existir e sobra um ponto solto no branco. Quem clicou em
+ *  Mai/2026 clicou justamente para comparar Mai/2026 com o resto — e
+ *  recebeu a destruição do contexto que motivou o clique.
+ *
+ *  Aqui a câmera se aproxima e a cena continua lá. `contexto` diz quantos
+ *  meses ficam visíveis de cada lado do escolhido:
+ *
+ *      contexto: 3   → mês escolhido ± 3 meses (padrão)
+ *      contexto: 1   → zoom fechado, ainda com vizinho para comparar
+ *      contexto: 0   → só o mês escolhido — comportamento do Qlik
+ *      ligado: false → desliga o zoom, a linha nunca se move
+ *
+ *  Mude aqui e recarregue a página. Nenhuma outra linha precisa mudar.
+ */
+const ZOOM = {
+  ligado: true,
+  contexto: 3,          // meses visíveis de cada lado do escolhido
+  escala: true,         // o eixo Y também reenquadra no que está visível
+  barras: true,         // barra/coluna reescala ignorando o que está excluído
+  ocultarExcluidos: false,  // true = o excluído some (Qlik); false = fica cinza
+  ms: 420,              // duração da aproximação
+};
+
+//: Quem pediu menos movimento no sistema operacional não recebe animação.
+//: Não é enfeite de acessibilidade: movimento involuntário dispara enjoo e
+//: enxaqueca em parte real do público.
+const SEM_ANIM = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+/*  O `innerHTML` troca o elemento inteiro, então a transição do CSS não roda
+ *  sozinha: o elemento novo já nasce no tamanho final e não há de onde sair.
+ *  O truque é nascer no tamanho ANTERIOR (guardado aqui) e receber o final no
+ *  quadro seguinte — aí o CSS tem os dois extremos e anima. */
+const _tamanhoAnterior = new Map();
+
+function tamanhoDeSaida(chave, destino) {
+  const antes = _tamanhoAnterior.has(chave) ? _tamanhoAnterior.get(chave) : destino;
+  _tamanhoAnterior.set(chave, destino);
+  return SEM_ANIM ? destino : antes;
+}
+
+function soltarAnimacao(id) {
+  if (SEM_ANIM) return;
+  requestAnimationFrame(() => {
+    const box = $(id);
+    if (!box) return;
+    box.querySelectorAll('[data-fim]').forEach((el) => {
+      el.style[el.dataset.eixo === 'h' ? 'height' : 'width'] = el.dataset.fim;
+    });
+  });
+}
+
 let M = null;             // o motor
 let medida = 'receita';   // medida corrente dos gráficos
 
@@ -164,20 +220,39 @@ function desenharIndicadores() {
 function desenharBarras(id, dim, opcoes = {}) {
   const itens = estadoDim(dim)
     .sort((a, b) => b.valor - a.valor || a.rotulo.localeCompare(b.rotulo, 'pt-BR'));
-  const limite = opcoes.limite || itens.length;
-  const mostra = itens.slice(0, limite);
-  const max = Math.max(1, ...mostra.map((x) => x.valor));
-  const total = itens.reduce((s, x) => s + x.valor, 0);
   const temSel = itens.some((x) => x.estado === 'selecionado');
+  const total = itens.reduce((s, x) => s + x.valor, 0);
 
-  $(id).innerHTML = mostra.map((x) => `
+  //  O zoom da barra é o reenquadramento da escala. Antes, o maior valor
+  //  incluía o que a seleção excluiu — e aí selecionar deixava todas as
+  //  barras minúsculas, espremidas contra um máximo que não existe mais.
+  const base = (ZOOM.ligado && ZOOM.barras && temSel)
+    ? itens.filter((x) => x.estado !== 'excluido')
+    : itens;
+
+  //  `ocultarExcluidos: true` reproduz o Qlik: o que saiu da seleção some.
+  //  O padrão é falso — o cinza ensina a estrutura da própria base.
+  const visiveis = (ZOOM.ligado && ZOOM.ocultarExcluidos && temSel)
+    ? itens.filter((x) => x.estado !== 'excluido')
+    : itens;
+
+  const limite = opcoes.limite || visiveis.length;
+  const mostra = visiveis.slice(0, limite);
+  const max = Math.max(1, ...(base.length ? base : itens).map((x) => x.valor));
+
+  $(id).innerHTML = mostra.map((x) => {
+    const pc = Math.min(100, 100 * x.valor / max).toFixed(1) + '%';
+    const saida = tamanhoDeSaida(`${dim}:${x.codigo}`, pc);
+    return `
     <button type="button" class="barra ${x.estado}${temSel && x.estado === 'possivel' ? ' apagada' : ''}"
             data-dim="${esc(dim)}" data-cod="${x.codigo}"
             title="${esc(x.rotulo)}: ${valorDaMedida(x.valor)} (${pct(x.valor, total)})${x.estado === 'excluido' ? ' — fora da seleção atual' : ''}">
       <span class="barra-nome">${esc(x.rotulo)}</span>
-      <span class="barra-trilho"><span class="barra-preenchida" style="width:${(100 * x.valor / max).toFixed(1)}%"></span></span>
+      <span class="barra-trilho"><span class="barra-preenchida" data-fim="${pc}" style="width:${saida}"></span></span>
       <span class="barra-valor">${x.estado === 'excluido' ? '—' : valorDaMedida(x.valor)}</span>
-    </button>`).join('');
+    </button>`;
+  }).join('');
+  soltarAnimacao(id);
 
   if (opcoes.contador) {
     const exc = itens.filter((x) => x.estado === 'excluido').length;
@@ -237,10 +312,80 @@ function desenharRosca(id, dim) {
 // é um recorte de período, então vira fatia de linhas como qualquer período.
 let mesEscolhido = null;   // { ano, mes, rotulo } ou null
 
+/*  A câmera do gráfico de evolução.
+ *
+ *  `evoPontos` guarda o que foi apurado; `zoomAtual` e `topoAtual` são a
+ *  posição corrente da câmera. A animação redesenha só o SVG a partir do
+ *  cache — não reapura nada no motor, senão seriam ~25 varreduras do cubo
+ *  por clique. Com o cache, cada quadro é montagem de string sobre 19
+ *  pontos: custo irrelevante. */
+let evoPontos = [];
+let evoParcial = null;
+let zoomAtual = null;
+let topoAtual = null;
+let zoomAnim = 0;
+
+/** Janela de índices que a câmera deve enquadrar. */
+function janelaAlvo() {
+  const n = evoPontos.length;
+  const tudo = { ini: 0, fim: Math.max(0, n - 1) };
+  if (!ZOOM.ligado || !mesEscolhido || !n) return tudo;
+  const i = evoPontos.findIndex((p) => p.ano === mesEscolhido.ano && p.mes === mesEscolhido.mes);
+  if (i < 0) return tudo;
+
+  const c = Math.max(0, ZOOM.contexto);
+  let a = i - c, b = i + c;
+  //  Encostar na borda não pode encolher a janela: o zoom teria tamanho
+  //  diferente só porque o mês escolhido é o primeiro ou o último, e a
+  //  comparação entre dois cliques deixaria de valer.
+  if (a < 0) { b = Math.min(n - 1, b - a); a = 0; }
+  if (b > n - 1) { a = Math.max(0, a - (b - (n - 1))); b = n - 1; }
+  return { ini: a, fim: b };
+}
+
+/** Teto do eixo Y para a janela — é o zoom vertical. */
+function tetoDe(jan) {
+  const a = Math.max(0, Math.floor(jan.ini));
+  const b = Math.min(evoPontos.length - 1, Math.ceil(jan.fim));
+  const base = (ZOOM.ligado && ZOOM.escala) ? evoPontos.slice(a, b + 1) : evoPontos;
+  const max = Math.max(1, ...(base.length ? base : evoPontos).map((p) => p.valor));
+  const passo = Math.pow(10, Math.floor(Math.log10(max)));
+  return Math.ceil(max / passo) * passo;
+}
+
+function animarZoom() {
+  cancelAnimationFrame(zoomAnim);
+  const alvo = janelaAlvo();
+  const teto = tetoDe(alvo);
+  const de = zoomAtual || alvo;
+  const tetoDeAntes = topoAtual == null ? teto : topoAtual;
+
+  const quieto = Math.abs(de.ini - alvo.ini) < 0.01
+              && Math.abs(de.fim - alvo.fim) < 0.01
+              && Math.abs(tetoDeAntes - teto) < 0.01;
+  if (SEM_ANIM || !ZOOM.ms || quieto) {
+    zoomAtual = alvo; topoAtual = teto;
+    pintarEvolucao(alvo, teto);
+    return;
+  }
+
+  const t0 = performance.now();
+  const passo = (agora) => {
+    const t = Math.min(1, (agora - t0) / ZOOM.ms);
+    const e = 1 - Math.pow(1 - t, 3);          // ease-out cúbico
+    zoomAtual = { ini: de.ini + (alvo.ini - de.ini) * e, fim: de.fim + (alvo.fim - de.fim) * e };
+    topoAtual = tetoDeAntes + (teto - tetoDeAntes) * e;
+    pintarEvolucao(zoomAtual, topoAtual);
+    if (t < 1) zoomAnim = requestAnimationFrame(passo);
+  };
+  zoomAnim = requestAnimationFrame(passo);
+}
+
 function desenharEvolucao() {
-  // A linha mostra o histórico inteiro mesmo com um mês escolhido: senão,
-  // clicar num ponto reduziria o gráfico a esse ponto e não haveria como
-  // voltar clicando. O mês escolhido aparece destacado, não isolado.
+  // A linha apura SEMPRE o histórico inteiro, mesmo com um mês escolhido.
+  // O que o mês escolhido faz é mover a câmera — não apagar o passado.
+  // Sem isso, clicar num ponto reduziria o gráfico a esse ponto e não
+  // haveria como voltar clicando.
   const deAntes = M.de, ateAntes = M.ate;
   if (mesEscolhido) M.periodoPorDia(0, M.ultimoDia);
   const def = MEDIDAS[medida];
@@ -251,6 +396,7 @@ function desenharEvolucao() {
       })()
     : M.porDia(medida);
   M.de = deAntes; M.ate = ateAntes;
+
   const porMes = new Map();
   dias.forEach((d, k) => {
     const data = new Date(M.origem.getTime() + d * 86400000);
@@ -272,22 +418,48 @@ function desenharEvolucao() {
     const ultimoDiaDoMes = new Date(ultimo.ano, ultimo.mes + 1, 0).getDate();
     const diaMaisRecente = new Date(M.origem.getTime() + M.data[M.ate - 1] * 86400000);
     const mesmoMes = diaMaisRecente.getFullYear() === ultimo.ano && diaMaisRecente.getMonth() === ultimo.mes;
-    if (mesmoMes && diaMaisRecente.getDate() < ultimoDiaDoMes) {
-      parcial = pontos.pop();
-    }
+    if (mesmoMes && diaMaisRecente.getDate() < ultimoDiaDoMes) parcial = pontos.pop();
   }
-  $('evo-nota').textContent = parcial
-    ? `${parcial.rotulo} está em andamento (${valorDaMedida(parcial.valor)} até agora) e fica fora da linha`
-    : '';
 
-  if (!pontos.length) { $('evolucao').innerHTML = '<p class="vazio">Sem dado no período.</p>'; return; }
+  //  Se o conjunto de meses mudou (outro período, outra seleção), a câmera
+  //  perde a referência e precisa recomeçar — interpolar entre dois eixos
+  //  diferentes produziria um movimento sem significado.
+  const assinatura = pontos.length + '|' + (pontos[0] && pontos[0].chave) + '|' + (pontos[pontos.length - 1] || {}).chave;
+  if (assinatura !== desenharEvolucao._assinatura) {
+    desenharEvolucao._assinatura = assinatura;
+    zoomAtual = null; topoAtual = null;
+  }
 
+  evoPontos = pontos;
+  evoParcial = parcial;
+
+  if (!pontos.length) { $('evolucao').innerHTML = '<p class="vazio">Sem dado no período.</p>'; $('evo-nota').innerHTML = ''; return; }
+  animarZoom();
+}
+
+/** Desenha o SVG a partir do cache, para a janela e o teto informados. */
+function pintarEvolucao(jan, topo) {
+  const pontos = evoPontos;
   const L = 760, A = 250, ml = 62, mr = 14, mt = 16, mb = 36;
-  const max = Math.max(...pontos.map((p) => p.valor), 1);
-  const passo = Math.pow(10, Math.floor(Math.log10(max)));
-  const topo = Math.ceil(max / passo) * passo;
-  const X = (i) => ml + (pontos.length === 1 ? (L - ml - mr) / 2 : i * (L - ml - mr) / (pontos.length - 1));
+  const larg = L - ml - mr;
+  const vao = jan.fim - jan.ini;
+  //  Janela de um ponto só (contexto 0): não há vão para distribuir, então o
+  //  ponto vai ao centro. É o caso em que o resultado fica igual ao do Qlik —
+  //  de propósito, porque é uma escolha sua no bloco ZOOM.
+  const X = (i) => (vao < 0.001 ? ml + larg / 2 : ml + (i - jan.ini) * larg / vao);
   const Y = (v) => mt + (1 - v / topo) * (A - mt - mb);
+
+  /*  Rótulo centralizado no ponto da borda transborda o recorte e sai
+   *  cortado pela metade ("R$ 99" em vez de "R$ 995 mil"). Nas pontas o
+   *  texto encosta no eixo em vez de centralizar. Estimo a largura por
+   *  caractere — medir de verdade exigiria tocar no DOM a cada quadro da
+   *  animação, e 3,2 px por caractere erra pouco nesta fonte. */
+  const ancorar = (x, texto) => {
+    const meia = 2 + String(texto).length * 1.6;
+    if (x - ml < meia) return ['start', ml];
+    if (L - mr - x < meia) return ['end', L - mr];
+    return ['middle', x];
+  };
 
   let g = '';
   for (let k = 0; k <= 4; k++) {
@@ -295,24 +467,53 @@ function desenharEvolucao() {
     g += `<line class="grade" x1="${ml}" x2="${L - mr}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"/>
           <text class="eixo" x="${ml - 8}" y="${(Y(v) + 4).toFixed(1)}" text-anchor="end">${valorDaMedida(v)}</text>`;
   }
-  const linha = pontos.map((p, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(p.valor).toFixed(1)).join(' ');
-  g += `<path d="${linha} L${X(pontos.length - 1).toFixed(1)} ${Y(0).toFixed(1)} L${X(0).toFixed(1)} ${Y(0).toFixed(1)} Z" class="area"/>`;
-  g += `<path d="${linha}" class="linha"/>`;
 
-  const pular = pontos.length > 16 ? Math.ceil(pontos.length / 14) : 1;
+  //  Tudo que é série entra no recorte: fora da janela a linha continua
+  //  existindo (é o que torna o movimento legível) mas não invade os eixos.
+  const linha = pontos.map((p, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(p.valor).toFixed(1)).join(' ');
+  let serie = `<path d="${linha} L${X(pontos.length - 1).toFixed(1)} ${Y(0).toFixed(1)} L${X(0).toFixed(1)} ${Y(0).toFixed(1)} Z" class="area"/>`;
+  serie += `<path d="${linha}" class="linha"/>`;
+
+  const dentro = (i) => i >= jan.ini - 0.5 && i <= jan.fim + 0.5;
+  const visiveis = pontos.filter((_, i) => dentro(i)).length;
+  const pular = visiveis > 16 ? Math.ceil(visiveis / 14) : 1;
+  let k = 0;
   pontos.forEach((p, i) => {
     const sel = !!mesEscolhido && mesEscolhido.ano === p.ano && mesEscolhido.mes === p.mes;
     const x = X(i), y = Y(p.valor);
-    if (i % pular === 0 || sel) {
-      g += `<text class="eixo${sel ? ' forte' : ''}" x="${x.toFixed(1)}" y="${A - 12}" text-anchor="middle">${p.rotulo}</text>`;
+    const visivel = dentro(i);
+    if (visivel && (k++ % pular === 0 || sel)) {
+      const [an, ax] = ancorar(x, p.rotulo);
+      g += `<text class="eixo${sel ? ' forte' : ''}" x="${ax.toFixed(1)}" y="${A - 12}" text-anchor="${an}">${p.rotulo}</text>`;
     }
-    g += `<circle class="ponto${sel ? ' sel' : ''}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${sel ? 6 : 3.5}"/>`;
-    g += `<circle class="alvo" data-ano="${p.ano}" data-mes="${p.mes}" data-rot="${p.rotulo}"
+    serie += `<circle class="ponto${sel ? ' sel' : ''}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${sel ? 6 : 3.5}"/>`;
+    //  Com o zoom aberto o valor cabe na tela: mostra o número em cima do
+    //  ponto, como no painel do Qlik. Com 19 meses não cabe e vira sujeira.
+    if (visivel && visiveis <= 9) {
+      const rot = valorDaMedida(p.valor);
+      const [an, ax] = ancorar(x, rot);
+      serie += `<text class="evo-val${sel ? ' forte' : ''}" x="${ax.toFixed(1)}" y="${(y - 12).toFixed(1)}" text-anchor="${an}">${rot}</text>`;
+    }
+    if (visivel) {
+      serie += `<circle class="alvo" data-ano="${p.ano}" data-mes="${p.mes}" data-rot="${p.rotulo}"
             cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="14" fill="transparent">
-            <title>${p.rotulo}: ${MEDIDAS[medida].dinheiro ? brl(p.valor) : num(p.valor, 0)} — clique para ver só este mês</title></circle>`;
+            <title>${p.rotulo}: ${MEDIDAS[medida].dinheiro ? brl(p.valor) : num(p.valor, 0)} — ${mesEscolhido && mesEscolhido.ano === p.ano && mesEscolhido.mes === p.mes ? 'clique para voltar ao histórico' : 'clique para aproximar neste mês'}</title></circle>`;
+    }
   });
 
-  $('evolucao').innerHTML = `<svg viewBox="0 0 ${L} ${A}" role="img" aria-label="Evolução mensal">${g}</svg>`;
+  $('evolucao').innerHTML = `<svg viewBox="0 0 ${L} ${A}" role="img" aria-label="Evolução mensal">
+    <defs><clipPath id="corte-evo"><rect x="${ml}" y="0" width="${larg}" height="${A}"/></clipPath></defs>
+    ${g}<g clip-path="url(#corte-evo)">${serie}</g></svg>`;
+
+  //  A nota do cabeçalho carrega o mês parcial e, quando há zoom, a saída.
+  //  O ✕ do chip já desfaz, mas quem está olhando o gráfico não olha o chip.
+  const nota = evoParcial
+    ? `${evoParcial.rotulo} está em andamento (${valorDaMedida(evoParcial.valor)} até agora) e fica fora da linha`
+    : '';
+  const voltar = (ZOOM.ligado && mesEscolhido)
+    ? `<button type="button" class="evo-voltar" data-limpar="@mes">⤢ ver os ${pontos.length} meses</button>`
+    : '';
+  $('evo-nota').innerHTML = esc(nota) + voltar;
 }
 
 /* ------------------------------------------------------------------ */
@@ -321,15 +522,24 @@ function desenharEvolucao() {
 
 function desenharHoras() {
   const itens = estadoDim('hora').sort((a, b) => Number(a.rotulo) - Number(b.rotulo));
-  const max = Math.max(1, ...itens.map((x) => x.valor));
   const temSel = itens.some((x) => x.estado === 'selecionado');
-  $('horas').innerHTML = `<div class="colunas-hora">` + itens.map((x) => `
+  const base = (ZOOM.ligado && ZOOM.barras && temSel)
+    ? itens.filter((x) => x.estado !== 'excluido')
+    : itens;
+  const max = Math.max(1, ...(base.length ? base : itens).map((x) => x.valor));
+
+  $('horas').innerHTML = `<div class="colunas-hora">` + itens.map((x) => {
+    const pc = Math.min(100, 100 * x.valor / max).toFixed(1) + '%';
+    const saida = tamanhoDeSaida(`hora:${x.codigo}`, pc);
+    return `
     <button type="button" class="col-hora ${x.estado}${temSel && x.estado === 'possivel' ? ' apagada' : ''}"
             data-dim="hora" data-cod="${x.codigo}"
             title="${x.rotulo}h: ${valorDaMedida(x.valor)}${x.estado === 'excluido' ? ' — fora da seleção' : ''}">
-      <span class="col-barra" style="height:${(100 * x.valor / max).toFixed(1)}%"></span>
+      <span class="col-barra" data-fim="${pc}" data-eixo="h" style="height:${saida}"></span>
       <span class="col-rot">${x.rotulo}h</span>
-    </button>`).join('') + '</div>';
+    </button>`;
+  }).join('') + '</div>';
+  soltarAnimacao('horas');
 }
 
 const ORDEM_SEMANA = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
@@ -337,16 +547,25 @@ const ORDEM_SEMANA = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta
 function desenharSemana() {
   const itens = estadoDim('dia_semana')
     .sort((a, b) => ORDEM_SEMANA.indexOf(a.rotulo) - ORDEM_SEMANA.indexOf(b.rotulo));
-  const max = Math.max(1, ...itens.map((x) => x.valor));
   const temSel = itens.some((x) => x.estado === 'selecionado');
-  $('semana').innerHTML = itens.map((x) => `
+  const base = (ZOOM.ligado && ZOOM.barras && temSel)
+    ? itens.filter((x) => x.estado !== 'excluido')
+    : itens;
+  const max = Math.max(1, ...(base.length ? base : itens).map((x) => x.valor));
+
+  $('semana').innerHTML = itens.map((x) => {
+    const pc = Math.min(100, 100 * x.valor / max).toFixed(1) + '%';
+    const saida = tamanhoDeSaida(`dia_semana:${x.codigo}`, pc);
+    return `
     <button type="button" class="barra ${x.estado}${temSel && x.estado === 'possivel' ? ' apagada' : ''}"
             data-dim="dia_semana" data-cod="${x.codigo}"
             title="${esc(x.rotulo)}: ${valorDaMedida(x.valor)}">
       <span class="barra-nome">${esc(x.rotulo)}</span>
-      <span class="barra-trilho"><span class="barra-preenchida" style="width:${(100 * x.valor / max).toFixed(1)}%"></span></span>
+      <span class="barra-trilho"><span class="barra-preenchida" data-fim="${pc}" style="width:${saida}"></span></span>
       <span class="barra-valor">${x.estado === 'excluido' ? '—' : valorDaMedida(x.valor)}</span>
-    </button>`).join('');
+    </button>`;
+  }).join('');
+  soltarAnimacao('semana');
 }
 
 /* ------------------------------------------------------------------ */

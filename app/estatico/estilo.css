@@ -224,7 +224,10 @@ tbody tr:hover { background: #f8fafc; }
 .barra:hover { background: #f1f5f9; }
 .barra-nome { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .barra-trilho { background: #eef2f7; border-radius: 4px; height: 17px; overflow: hidden; }
-.barra-preenchida { display: block; height: 100%; background: var(--marca); border-radius: 4px; transition: width .18s ease; }
+.barra-preenchida { display: block; height: 100%; background: var(--marca); border-radius: 4px;
+  /* mesma curva e duração do ZOOM.ms em painel.js: a barra reenquadra junto
+     com a câmera do gráfico de evolução, senão a tela se move em dois tempos */
+  transition: width .42s cubic-bezier(.22, .61, .36, 1); }
 .barra-valor { font-size: 12.5px; color: var(--suave); font-variant-numeric: tabular-nums; min-width: 72px; text-align: right; }
 
 .barra.selecionado { background: #eff6ff; }
@@ -271,7 +274,8 @@ tbody tr:hover { background: #f8fafc; }
 /* ---- colunas por hora ---- */
 .colunas-hora { display: flex; align-items: flex-end; gap: 4px; height: 150px; }
 .col-hora { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; gap: 5px; }
-.col-barra { display: block; width: 100%; background: var(--marca); border-radius: 4px 4px 0 0; min-height: 2px; }
+.col-barra { display: block; width: 100%; background: var(--marca); border-radius: 4px 4px 0 0; min-height: 2px;
+  transition: height .42s cubic-bezier(.22, .61, .36, 1); }
 .col-rot { font-size: 10.5px; color: var(--suave); }
 
 /* ---- tabela ---- */
@@ -309,3 +313,29 @@ tbody tr:hover { background: #f8fafc; }
 .col-hora.excluido { cursor: default; }
 .col-hora.excluido .col-barra { background: repeating-linear-gradient(45deg, #e5e7eb 0 4px, #eef0f3 4px 8px); min-height: 6px; }
 .col-hora.excluido .col-rot { color: #b6bdc7; }
+
+/* ------------------------------------------------------------------ */
+/* Zoom do gráfico de evolução                                         */
+/* ------------------------------------------------------------------ */
+
+/* Valor em cima do ponto. Só aparece com a janela aberta (até 9 meses),
+   porque com 19 meses os números se encavalam e viram sujeira. */
+.evo-val { font-size: 11px; fill: var(--suave); font-weight: 600; }
+.evo-val.forte { fill: var(--marca); font-size: 12.5px; font-weight: 800; }
+
+/* A saída do zoom fica no cabeçalho do próprio gráfico. O ✕ do chip já
+   desfaz, mas quem está olhando a linha não olha a fila de chips. */
+.evo-voltar {
+  margin-left: 10px; padding: 3px 10px; font: inherit; font-size: 12px; font-weight: 600;
+  color: var(--marca); background: #eef3fb; border: 1px solid #c9d8ef;
+  border-radius: 999px; cursor: pointer; white-space: nowrap;
+}
+.evo-voltar:hover { background: #e2ebf8; }
+.evo-voltar:focus-visible { outline: 2px solid var(--marca); outline-offset: 2px; }
+
+/* Movimento involuntário dispara enjoo e enxaqueca em parte real do
+   público. Quem pediu menos movimento no sistema recebe o resultado
+   final sem a transição — o zoom continua acontecendo, só não desliza. */
+@media (prefers-reduced-motion: reduce) {
+  .barra-preenchida, .col-barra { transition: none; }
+}
