@@ -350,3 +350,8 @@ tbody tr:hover { background: #f8fafc; }
   color: #8a5a00; background: #fff6e5; border: 1px solid #f0d9a8;
   border-radius: 999px; white-space: nowrap; cursor: help;
 }
+
+/* Fatia selecionada da rosca: sai do prato e ganha contorno claro, para
+   destacar contra a propria cor quando a fatia e grande. */
+.fatia { transition: stroke-width .25s ease, opacity .25s ease; }
+.fatia.sel { filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .25)); }

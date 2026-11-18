@@ -268,11 +268,16 @@ function desenharBarras(id, dim, opcoes = {}) {
 
 const CORES = ['#1351b4', '#e07b00', '#168821', '#c2185b', '#7a4fb5', '#0c7a8a', '#8a6d3b', '#4b5563'];
 
+/*  Deslocamento da fatia selecionada, em unidades do viewBox (160x160).
+ *  É o "zoom" possível numa rosca: a fatia sai do prato. */
+const EXPLODE = 8;
+
 function desenharRosca(id, dim) {
   const itens = estadoDim(dim).sort((a, b) => b.valor - a.valor);
   const vivos = itens.filter((x) => x.valor > 0);
   const total = vivos.reduce((s, x) => s + x.valor, 0);
   const temSel = itens.some((x) => x.estado === 'selecionado');
+  const valSel = itens.filter((x) => x.estado === 'selecionado').reduce((s, x) => s + x.valor, 0);
   const R = 58, C = 2 * Math.PI * R;
   let off = 0, arcos = '';
 
@@ -280,11 +285,20 @@ function desenharRosca(id, dim) {
     const comp = total ? C * x.valor / total : 0;
     const cor = CORES[k % CORES.length];
     const sel = x.estado === 'selecionado';
-    arcos += `<circle class="fatia" data-dim="${esc(dim)}" data-cod="${x.codigo}"
+
+    //  Ângulo do meio da fatia, medido do topo no sentido horário (é onde o
+    //  rotate(-90) coloca a origem). É por ele que a fatia sabe para que
+    //  lado sair.
+    const meio = total ? ((off + comp / 2) / C) * 2 * Math.PI : 0;
+    const d = (ZOOM.ligado && sel) ? EXPLODE : 0;
+    const dx = (Math.sin(meio) * d).toFixed(2);
+    const dy = (-Math.cos(meio) * d).toFixed(2);
+
+    arcos += `<g transform="translate(${dx} ${dy})"><circle class="fatia${sel ? ' sel' : ''}" data-dim="${esc(dim)}" data-cod="${x.codigo}"
       cx="80" cy="80" r="${R}" fill="none" stroke="${cor}" stroke-width="${sel ? 28 : 22}"
       stroke-dasharray="${comp.toFixed(2)} ${(C - comp).toFixed(2)}" stroke-dashoffset="${-off.toFixed(2)}"
-      transform="rotate(-90 80 80)" opacity="${temSel && !sel ? 0.35 : 1}">
-      <title>${esc(x.rotulo)}: ${curto(x.valor)} (${pct(x.valor, total)})</title></circle>`;
+      transform="rotate(-90 80 80)" opacity="${temSel && !sel ? 0.3 : 1}">
+      <title>${esc(x.rotulo)}: ${valorDaMedida(x.valor)} (${pct(x.valor, total)})</title></circle></g>`;
     off += comp;
     x.cor = cor;
   });
@@ -296,11 +310,26 @@ function desenharRosca(id, dim) {
       <b>${x.estado === 'excluido' ? '—' : pct(x.valor, total)}</b>
     </button>`).join('');
 
+  /*  O centro responde a pergunta que a seleção realmente faz.
+   *
+   *  Numa pizza o denominador encolhe junto com a seleção: selecionar uma
+   *  fatia faz ela virar 100% de si mesma, e a ferramenta escreve "100%" na
+   *  tela. A conta está certa e a resposta é inútil — o usuário perguntou
+   *  "quanto esta fatia é do total?" e recebeu "esta fatia é tudo que
+   *  sobrou". Tautologia.
+   *
+   *  Aqui o `skip` já mantém o denominador inteiro (a dimensão é excluída
+   *  da própria máscara), então o percentual da legenda nunca vira 100%.
+   *  O centro fecha o raciocínio: mostra o valor selecionado e, embaixo,
+   *  contra o que ele está sendo comparado. */
+  const centroNum = temSel ? valorDaMedida(valSel) : valorDaMedida(total);
+  const centroSub = temSel ? `${pct(valSel, total)} de ${valorDaMedida(total)}` : 'no filtro';
+
   $(id).innerHTML = `<div class="rosca-wrap">
     <svg viewBox="0 0 160 160" role="img" aria-label="${esc(ROTULO_DIM[dim])}">
       ${total ? arcos : '<circle cx="80" cy="80" r="58" fill="none" stroke="#e5e7eb" stroke-width="22"/>'}
-      <text x="80" y="76" text-anchor="middle" class="rosca-num">${valorDaMedida(total)}</text>
-      <text x="80" y="95" text-anchor="middle" class="rosca-sub">no filtro</text>
+      <text x="80" y="76" text-anchor="middle" class="rosca-num">${centroNum}</text>
+      <text x="80" y="95" text-anchor="middle" class="rosca-sub">${esc(centroSub)}</text>
     </svg><div class="legenda">${legenda}</div></div>`;
 }
 
@@ -675,7 +704,16 @@ function desenharTabela() {
     receita: receita[codigo], margem: receita[codigo] - custo[codigo], qtd: qtd[codigo],
     pct: receita[codigo] ? 100 * (receita[codigo] - custo[codigo]) / receita[codigo] : 0,
     estado: sel.has(codigo) ? 'selecionado' : receita[codigo] > 0 ? 'possivel' : 'excluido',
-  })).sort((a, b) => b.receita - a.receita);
+  //  O "zoom" possível numa tabela: a linha escolhida sobe ao topo.
+  //
+  //  A tabela de produtos rola, e o produto selecionado pode estar na
+  //  linha 40 — fora da vista. Clicar e não ver nada acontecer é o mesmo
+  //  que o gráfico não responder. Subir a linha é aproximar dela sem
+  //  esconder nenhuma outra: as excluídas continuam abaixo, com "—",
+  //  porque o que caiu fora da seleção também é informação sobre a base.
+  })).sort((a, b) =>
+    (ZOOM.ligado ? (b.estado === 'selecionado') - (a.estado === 'selecionado') : 0)
+    || b.receita - a.receita);
 
   $('tabela').innerHTML = linhas.map((l) => `
     <tr class="${l.estado}" data-dim="produto" data-cod="${l.codigo}">
