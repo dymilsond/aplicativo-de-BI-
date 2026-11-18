@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block titulo %}{{ negocio.nome }}{% endblock %}</title>
+  <link rel="icon" href="/estatico/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/estatico/estilo.css">
   <script src="/estatico/echarts.min.js"></script>
   <script src="/estatico/htmx.min.js" defer></script>
@@ -31,6 +32,7 @@
 </header>
 
 <nav class="menu">
+  <a href="/painel"  class="{{ 'ativo' if tela == 'painel' }}">Painel</a>
   <a href="/"        class="{{ 'ativo' if tela == 'hoje' }}">Hoje</a>
   <a href="/vendas"  class="{{ 'ativo' if tela == 'vendas' }}">Vendas</a>
   <a href="/estoque" class="{{ 'ativo' if tela == 'estoque' }}">Estoque</a>

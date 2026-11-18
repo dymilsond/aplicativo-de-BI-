@@ -173,3 +173,123 @@ tbody tr:hover { background: #f8fafc; }
 .demo td, .demo th { padding: 6px 8px; font-size: 12.5px; }
 .demo code { background: #f1f5f9; padding: 1px 6px; border-radius: 4px; }
 .demo .nota { color: var(--suave); margin-top: 10px; line-height: 1.5; }
+
+/* ===================================================================
+   Painel associativo — tri-estado, chips e gráficos em SVG
+   =================================================================== */
+
+.carregando { padding: 60px 20px; text-align: center; color: var(--suave); }
+
+.painel-topo { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; flex-wrap: wrap; margin-bottom: 14px; }
+.painel-topo h2 { margin: 0 0 2px; }
+.painel-ctrl { display: flex; gap: 10px; flex-wrap: wrap; }
+
+.seg { display: inline-flex; background: var(--papel); border: 1px solid var(--borda); border-radius: 999px; padding: 3px; }
+.seg button { border: 0; background: transparent; padding: 7px 14px; border-radius: 999px; cursor: pointer; font: inherit; font-size: 13px; color: var(--suave); }
+.seg button[aria-pressed="true"] { background: var(--marca); color: #fff; font-weight: 600; }
+
+.dica-associativa { background: #eff6ff; border: 1px solid #bfdbfe; border-left: 4px solid var(--marca); border-radius: var(--raio); padding: 12px 16px; font-size: 13.5px; color: #1e3a5f; margin-bottom: 14px; }
+.amostra-cinza { background: #e5e7eb; color: #9ca3af; padding: 1px 7px; border-radius: 4px; font-weight: 600; }
+
+/* ---- chips ---- */
+.chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.chip { display: inline-flex; align-items: center; gap: 7px; background: var(--marca); color: #fff; border-radius: 999px; padding: 6px 8px 6px 14px; font-size: 13px; }
+.chip b { font-weight: 600; opacity: .85; }
+.chip button { background: rgba(255,255,255,.22); border: 0; color: #fff; width: 20px; height: 20px; border-radius: 50%; cursor: pointer; font-size: 12px; line-height: 1; }
+.chip button:hover { background: rgba(255,255,255,.4); }
+.chip-limpar { background: transparent; border: 1px dashed var(--suave); color: var(--suave); border-radius: 999px; padding: 6px 14px; font: inherit; font-size: 13px; cursor: pointer; }
+.chip-limpar:hover { border-style: solid; color: var(--texto); }
+
+/* ---- indicadores ---- */
+.ind { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.ind-cartao { background: var(--papel); border: 1px solid var(--borda); border-radius: var(--raio); padding: 14px 16px; box-shadow: var(--sombra); }
+.ind-cartao.destaque { border-left: 4px solid var(--marca); }
+.ind-rot { display: block; font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--suave); }
+.ind-num { display: block; font-size: 25px; font-weight: 700; margin: 5px 0 2px; font-variant-numeric: tabular-nums; }
+.ind-nota { display: block; font-size: 12.5px; color: var(--suave); }
+
+/* ---- cartões ---- */
+.painel-cartao { background: var(--papel); border: 1px solid var(--borda); border-radius: var(--raio); padding: 14px 16px 16px; box-shadow: var(--sombra); margin-bottom: 14px; }
+.cartao-cab { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 10px; }
+.cartao-cab h3 { margin: 0; font-size: 15px; }
+.cont, .tempo { font-size: 12px; color: var(--suave); }
+.tempo b { color: var(--marca); font-variant-numeric: tabular-nums; }
+.sub-tit { font-size: 12.5px; color: var(--suave); margin: 16px 0 8px; text-transform: uppercase; letter-spacing: .04em; }
+
+/* ---- barras com tri-estado ---- */
+.barras { display: flex; flex-direction: column; gap: 3px; }
+.barras.rolagem { max-height: 360px; overflow-y: auto; }
+.barra { display: grid; grid-template-columns: minmax(96px, 34%) 1fr auto; align-items: center; gap: 10px;
+         background: transparent; border: 0; border-radius: 7px; padding: 6px 8px; cursor: pointer; font: inherit; text-align: left; width: 100%; }
+.barra:hover { background: #f1f5f9; }
+.barra-nome { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.barra-trilho { background: #eef2f7; border-radius: 4px; height: 17px; overflow: hidden; }
+.barra-preenchida { display: block; height: 100%; background: var(--marca); border-radius: 4px; transition: width .18s ease; }
+.barra-valor { font-size: 12.5px; color: var(--suave); font-variant-numeric: tabular-nums; min-width: 72px; text-align: right; }
+
+.barra.selecionado { background: #eff6ff; }
+.barra.selecionado .barra-nome { font-weight: 700; color: var(--marca); }
+.barra.selecionado .barra-preenchida { background: var(--marca); }
+.barra.apagada .barra-preenchida { opacity: .4; }
+.barra.apagada .barra-nome { color: var(--suave); }
+
+/* o cinza: existe na base, não sobrevive à seleção */
+.barra.excluido { cursor: default; }
+.barra.excluido:hover { background: transparent; }
+.barra.excluido .barra-nome,
+.barra.excluido .barra-valor { color: #b6bdc7; }
+.barra.excluido .barra-trilho { background: #f3f4f6; }
+.barra.excluido .barra-preenchida { background: repeating-linear-gradient(45deg, #e5e7eb 0 4px, #eef0f3 4px 8px); width: 100% !important; }
+
+/* ---- rosca ---- */
+.rosca-wrap { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.rosca-wrap svg { width: 160px; height: 160px; flex: none; }
+.fatia { cursor: pointer; transition: stroke-width .15s ease; }
+.rosca-num { font-size: 19px; font-weight: 800; fill: var(--texto); }
+.rosca-sub { font-size: 10px; fill: var(--suave); }
+.legenda { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 170px; }
+.leg { display: flex; align-items: center; gap: 8px; background: transparent; border: 0; border-radius: 6px; padding: 5px 8px; cursor: pointer; font: inherit; font-size: 13px; text-align: left; }
+.leg:hover { background: #f1f5f9; }
+.leg i { width: 11px; height: 11px; border-radius: 3px; flex: none; }
+.leg span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.leg b { font-variant-numeric: tabular-nums; color: var(--suave); font-weight: 600; }
+.leg.selecionado { background: #eff6ff; font-weight: 700; }
+.leg.excluido { cursor: default; opacity: .45; }
+.leg.excluido:hover { background: transparent; }
+
+/* ---- evolução (SVG) ---- */
+.grafico-svg svg { width: 100%; height: auto; }
+.grade { stroke: #eef2f7; stroke-width: 1; }
+.eixo { font-size: 10.5px; fill: var(--suave); }
+.eixo.forte { fill: var(--marca); font-weight: 700; }
+.area { fill: var(--marca); fill-opacity: .10; }
+.linha { fill: none; stroke: var(--marca); stroke-width: 2.4; stroke-linejoin: round; }
+.ponto { fill: var(--marca); }
+.ponto.sel { fill: var(--texto); stroke: var(--marca); stroke-width: 2; }
+.alvo { cursor: pointer; }
+
+/* ---- colunas por hora ---- */
+.colunas-hora { display: flex; align-items: flex-end; gap: 4px; height: 150px; }
+.col-hora { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; gap: 5px; }
+.col-barra { display: block; width: 100%; background: var(--marca); border-radius: 4px 4px 0 0; min-height: 2px; }
+.col-rot { font-size: 10.5px; color: var(--suave); }
+
+/* ---- tabela ---- */
+.rolagem-tabela { max-height: 420px; overflow-y: auto; }
+.tab-produtos { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.tab-produtos th { position: sticky; top: 0; background: var(--papel); z-index: 1; }
+.tab-produtos tbody tr { cursor: pointer; }
+.tab-produtos tbody tr:hover { background: #f1f5f9; }
+.tab-produtos td, .tab-produtos th { padding: 8px 10px; border-bottom: 1px solid var(--borda); text-align: left; }
+.tab-produtos .n { text-align: right; font-variant-numeric: tabular-nums; }
+.tab-produtos tr.selecionado { background: #eff6ff; font-weight: 600; }
+.tab-produtos tr.excluido { color: #b6bdc7; cursor: default; }
+.tab-produtos tr.excluido:hover { background: transparent; }
+
+.selo { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+.selo.bom { background: #dcfce7; color: #166534; }
+.selo.medio { background: #fef3c7; color: #92400e; }
+.selo.ruim { background: #fee2e2; color: #991b1b; }
+
+.nota-dado { font-size: 12.5px; color: var(--suave); text-align: center; padding: 8px 0 4px; }
+.vazio { color: var(--suave); padding: 20px 0; text-align: center; }

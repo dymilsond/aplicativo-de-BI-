@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block titulo %}Painel — {{ negocio.nome }}{% endblock %}
+
+{% block conteudo %}
+
+<div id="carregando" class="carregando">Carregando…</div>
+
+<div id="painel" hidden>
+
+  <div class="painel-topo">
+    <div>
+      <h2>Painel</h2>
+      <p class="explica" id="resumo-carga"></p>
+    </div>
+    <div class="painel-ctrl">
+      <div class="seg" id="periodos" role="group" aria-label="Período"></div>
+      <div class="seg" role="group" aria-label="Medida">
+        <button type="button" data-medida="receita" aria-pressed="true">Faturamento</button>
+        <button type="button" data-medida="quantidade" aria-pressed="false">Quantidade</button>
+        <button type="button" data-medida="cupons" aria-pressed="false">Atendimentos</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="dica-associativa">
+    <strong>Clique em qualquer número para filtrar.</strong>
+    Barra, fatia, linha da tabela — tudo responde. O que fica
+    <span class="amostra-cinza">cinza</span> existe na base mas não sobrevive à
+    seleção atual; clique de novo para desfazer.
+  </div>
+
+  <div class="chips" id="chips" aria-label="Seleções ativas" hidden></div>
+
+  <div class="ind" id="indicadores"></div>
+
+  <article class="painel-cartao">
+    <div class="cartao-cab">
+      <h3>Evolução mês a mês</h3>
+      <span class="cont" id="evo-nota"></span>
+      <span class="tempo" title="Tempo do último recálculo da tela inteira">recalculado em <b id="tempo">–</b></span>
+    </div>
+    <div id="evolucao" class="grafico-svg"></div>
+  </article>
+
+  <div class="colunas">
+    <article class="painel-cartao">
+      <div class="cartao-cab"><h3>Categoria</h3><span class="cont" id="cat-cont"></span></div>
+      <div id="cat" class="barras"></div>
+    </article>
+    <article class="painel-cartao">
+      <div class="cartao-cab"><h3>Forma de pagamento</h3></div>
+      <div id="pag"></div>
+    </article>
+  </div>
+
+  <div class="colunas">
+    <article class="painel-cartao">
+      <div class="cartao-cab"><h3>Produtos</h3><span class="cont" id="prod-cont"></span></div>
+      <div id="prod" class="barras rolagem"></div>
+    </article>
+    <article class="painel-cartao">
+      <div class="cartao-cab"><h3>Unidade</h3><span class="cont" id="uni-cont"></span></div>
+      <div id="uni" class="barras"></div>
+      <h4 class="sub-tit">Média por dia da semana</h4>
+      <div id="semana" class="barras"></div>
+    </article>
+  </div>
+
+  <article class="painel-cartao">
+    <div class="cartao-cab">
+      <h3>Movimento ao longo do dia</h3>
+      <span class="cont">segue o período, não a seleção de produto</span>
+    </div>
+    <div id="horas"></div>
+  </article>
+
+  <article class="painel-cartao">
+    <div class="cartao-cab"><h3>Produtos em detalhe</h3><span class="cont">clique na linha para filtrar</span></div>
+    <div class="rolagem-tabela">
+      <table class="tab-produtos">
+        <thead>
+          <tr><th>Produto</th><th class="n">Quantidade</th><th class="n">Faturamento</th>
+              <th class="n">Lucro bruto</th><th class="n">Margem</th></tr>
+        </thead>
+        <tbody id="tabela"></tbody>
+      </table>
+    </div>
+  </article>
+
+  <p class="nota-dado">
+    Dado fictício de dois anos. O cubo entregue ao seu navegador contém apenas
+    <strong>{{ usuario.descricao_do_acesso() }}</strong> — a redução de dados acontece no
+    servidor, antes do envio.
+  </p>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script type="module">
+  import { iniciar } from '/estatico/painel.js';
+  iniciar().catch((e) => {
+    document.getElementById('carregando').innerHTML =
+      '<strong>Não foi possível carregar o cubo.</strong><br>' + e.message;
+  });
+</script>
+{% endblock %}

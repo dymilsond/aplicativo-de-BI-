@@ -26,6 +26,7 @@ sozinho custaria mais memória que o cubo inteiro.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import struct
 from dataclasses import dataclass
@@ -85,10 +86,27 @@ def _dias_desde(datas: list, origem) -> bytes:
     return struct.pack(f"<{len(datas)}H", *((d - origem).days for d in datas))
 
 
-def montar(caminho_banco: Path, destino: Path) -> dict:
-    """Gera `<destino>/cubo.bin` e `<destino>/cubo.json` (o cabeçalho)."""
+def montar(caminho_banco: Path, destino: Path, unidades: tuple[str, ...] | None = None) -> dict:
+    """Gera `<destino>/cubo.bin` e `<destino>/cubo.json` (o cabeçalho).
+
+    `unidades` é a **redução de dados**, e ela acontece aqui — não na tela.
+
+    Com o motor rodando no navegador, filtrar na interface não é segurança:
+    o dado já estaria na máquina do usuário, a um F12 de distância. Então
+    cada perfil de acesso recebe um cubo próprio, contendo **apenas** as
+    unidades a que tem direito. Quem só enxerga uma loja não recebe os bytes
+    das outras — não tem o que vazar.
+    """
     destino.mkdir(parents=True, exist_ok=True)
     con = duckdb.connect(str(caminho_banco), read_only=True)
+
+    # `CREATE VIEW` não aceita parâmetro preparado no DuckDB, então o filtro
+    # entra direto em cada consulta — sempre como parâmetro, nunca concatenado.
+    if unidades:
+        filtro = "WHERE unidade IN (" + ", ".join("?" for _ in unidades) + ")"
+        p_unid = list(unidades)
+    else:
+        filtro, p_unid = "", []
 
     dims = ", ".join(DIMENSOES_VENDA)
     linhas = con.execute(
@@ -99,10 +117,18 @@ def montar(caminho_banco: Path, destino: Path) -> dict:
                sum(custo)             AS custo,
                count(DISTINCT cupom)  AS cupons
         FROM venda
+        {filtro}
         GROUP BY data, {dims}
         ORDER BY data            -- período vira fatia contígua; ver docstring
-        """
+        """,
+        p_unid,
     ).fetchall()
+
+    if not linhas:
+        raise ValueError(
+            f"Nenhuma venda para as unidades {unidades} em {caminho_banco.name}. "
+            "Confira se o nome da unidade no cadastro bate com o do dado."
+        )
 
     n = len(linhas)
     datas = [l[0] for l in linhas]
@@ -150,10 +176,11 @@ def montar(caminho_banco: Path, destino: Path) -> dict:
 
     # Cubo da hora: pequeno o bastante para ir inteiro, sem dimensão de produto.
     hora = con.execute(
-        """
+        f"""
         SELECT data, hora, unidade, sum(receita) AS receita, count(DISTINCT cupom) AS cupons
-        FROM venda GROUP BY data, hora, unidade ORDER BY data
-        """
+        FROM venda {filtro} GROUP BY data, hora, unidade ORDER BY data
+        """,
+        p_unid,
     ).fetchall()
     cabecalho["hora"] = {
         "linhas": len(hora),
@@ -185,12 +212,46 @@ def montar(caminho_banco: Path, destino: Path) -> dict:
     }
 
 
+def pasta_do_perfil(negocio: str, unidades: tuple[str, ...] | None) -> str:
+    """Nome estável da pasta do cubo de um perfil de acesso.
+
+    Quem vê tudo cai em `<negocio>/todas`; quem tem redução cai numa pasta
+    derivada das unidades permitidas, ordenadas para o nome não depender da
+    ordem em que vieram.
+    """
+    if not unidades:
+        return f"{negocio}/todas"
+    chave = hashlib.sha1("|".join(sorted(unidades)).encode("utf-8")).hexdigest()[:12]
+    return f"{negocio}/{chave}"
+
+
+def montar_todos(diretorio: Path, perfis: dict[str, set[tuple[str, ...] | None]]) -> list[dict]:
+    """Gera um cubo por perfil de acesso de cada negócio."""
+    saida = []
+    for negocio, conjuntos in perfis.items():
+        banco = diretorio / f"{negocio}.duckdb"
+        for unidades in sorted(conjuntos, key=lambda u: ("" if u is None else "|".join(sorted(u)))):
+            pasta = diretorio / "cubo" / pasta_do_perfil(negocio, unidades)
+            r = montar(banco, pasta, unidades)
+            r["negocio"] = negocio
+            r["unidades"] = "todas" if not unidades else ", ".join(unidades)
+            r["pasta"] = pasta
+            saida.append(r)
+    return saida
+
+
 if __name__ == "__main__":  # pragma: no cover
+    from chassi.auth import USUARIOS
     from chassi.banco import DIRETORIO_DADOS
 
-    for negocio in ("padaria", "supermercado", "farmacia"):
-        r = montar(DIRETORIO_DADOS / f"{negocio}.duckdb", DIRETORIO_DADOS / "cubo" / negocio)
+    # Um cubo por perfil que existe no cadastro: ninguém recebe byte de
+    # unidade que não pode ver.
+    perfis: dict[str, set] = {}
+    for cadastro in USUARIOS.values():
+        perfis.setdefault(cadastro["negocio"], set()).add(cadastro["unidades"])
+
+    for r in montar_todos(DIRETORIO_DADOS, perfis):
         print(
-            f"{negocio:14} {r['linhas']:>7,} linhas · "
-            f"{r['bytes'] / 1_048_576:5.2f} MB binário + {r['cabecalho_bytes'] / 1024:.1f} KB cabeçalho"
+            f"{r['negocio']:14} {r['unidades'][:34]:34} {r['linhas']:>7,} linhas · "
+            f"{r['bytes'] / 1_048_576:5.2f} MB"
         )

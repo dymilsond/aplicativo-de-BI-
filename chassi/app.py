@@ -15,11 +15,11 @@ import json
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from chassi import auth, banco, consultas
+from chassi import auth, banco, consultas, cubo
 from chassi.datas import mes_curto, mes_longo
 from chassi.seguranca import ConsultaInsegura, Usuario
 from clientes.catalogo import NEGOCIOS
@@ -265,6 +265,45 @@ def _serie_por_unidade(linhas: list[dict]) -> dict:
             for u in unidades
         ],
     }
+
+
+# ---------------------------------------------------------------------------
+# Cubo do motor associativo
+# ---------------------------------------------------------------------------
+
+
+@app.get("/cubo/{arquivo}")
+def servir_cubo(arquivo: str, usuario: Usuario = Depends(usuario_logado)):
+    """Entrega o cubo **do perfil do usuário da sessão**.
+
+    O caminho nunca vem do cliente: ele é derivado do usuário autenticado.
+    Um usuário com redução recebe um arquivo que só contém as unidades dele —
+    a redução é no byte, não na tela. Com o motor rodando no navegador,
+    filtrar na interface não seria segurança nenhuma.
+    """
+    if arquivo not in ("cubo.json", "cubo.bin"):
+        raise HTTPException(status_code=404, detail="Arquivo de cubo desconhecido.")
+
+    pasta = banco.DIRETORIO_DADOS / "cubo" / cubo.pasta_do_perfil(
+        usuario.negocio, usuario.unidades
+    )
+    destino = pasta / arquivo
+    if not destino.is_file():
+        raise HTTPException(
+            status_code=503,
+            detail="O cubo deste perfil ainda não foi gerado. Rode: python -m chassi.cubo",
+        )
+    tipo = "application/json" if arquivo.endswith(".json") else "application/octet-stream"
+    return FileResponse(destino, media_type=tipo, headers={"Cache-Control": "no-store"})
+
+
+@app.get("/painel", response_class=HTMLResponse)
+def painel(request: Request, usuario: Usuario = Depends(usuario_logado)):
+    """Painel associativo: tudo clica, tudo responde."""
+    return templates.TemplateResponse(
+        request=request, name="painel.html",
+        context=_contexto(request, usuario, "painel"),
+    )
 
 
 @app.get("/saude")
