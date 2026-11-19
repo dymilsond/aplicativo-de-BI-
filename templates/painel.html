@@ -28,16 +28,26 @@
        Foco seria mentira, porque lá nada fica cinza. -->
   <div class="dica-associativa" id="dica"></div>
 
-  <div class="filtros" id="filtros">
-    <div class="busca-wrap">
-      <input type="search" id="busca-global" autocomplete="off" spellcheck="false"
-             placeholder="Buscar em todo o painel…"
-             aria-label="Buscar em todas as dimensões">
-      <div class="busca-res" id="busca-res" hidden></div>
-    </div>
-    <div class="pilulas" id="pilulas" role="group" aria-label="Filtros por dimensão"></div>
-    <div class="pop" id="pop" hidden role="dialog" aria-label="Lista de valores"></div>
-  </div>
+  <!-- Em tela estreita a lateral sai do fluxo e vira painel deslizante;
+       este botão é a única forma de abri-la lá. Em tela larga ele some. -->
+  <button type="button" class="abre-filtros" id="abre-filtros" aria-expanded="false"
+          aria-controls="filtros">Filtros<span id="abre-cont"></span></button>
+
+  <div class="painel-grid">
+
+    <aside class="lateral" id="filtros" aria-label="Filtros">
+      <div class="lateral-topo">
+        <input type="search" id="busca-global" autocomplete="off" spellcheck="false"
+               placeholder="Buscar em todo o painel…"
+               aria-label="Buscar em todas as dimensões">
+        <button type="button" class="fecha-lateral" id="fecha-lateral" aria-label="Fechar filtros">✕</button>
+        <div class="busca-res" id="busca-res" hidden></div>
+      </div>
+      <div class="lateral-acoes" id="lateral-acoes" hidden></div>
+      <div class="caixas" id="caixas"></div>
+    </aside>
+
+    <div class="conteudo">
 
   <div class="chips" id="chips" aria-label="Seleções ativas" hidden></div>
 
@@ -97,12 +107,16 @@
     </div>
   </article>
 
+    </div><!-- /.conteudo -->
+  </div><!-- /.painel-grid -->
+
   <p class="nota-dado">
     Dado fictício de dois anos. O cubo entregue ao seu navegador contém apenas
     <strong>{{ usuario.descricao_do_acesso() }}</strong> — a redução de dados acontece no
     servidor, antes do envio.
   </p>
 
+  <div class="veu" id="veu" hidden></div>
 </div>
 {% endblock %}
 

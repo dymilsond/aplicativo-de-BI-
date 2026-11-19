@@ -1,23 +1,27 @@
-/*  Barra de filtros com busca.
+/*  Painel de filtros — coluna lateral esquerda.
  *
- *  O painel inteiro já filtra no clique, mas isso só alcança o que está
- *  desenhado: o gráfico de produto mostra os 14 maiores, e o 40º produto
- *  não tem onde ser clicado. É para ele que o filtro existe.
+ *  O painel já filtra no clique, mas isso só alcança o que está desenhado:
+ *  o gráfico de produto mostra os 14 maiores, e o 40º produto não tem onde
+ *  ser clicado. É para ele que o filtro existe.
  *
- *  Duas entradas:
+ *  Três entradas, de cima para baixo:
  *
  *    BUSCA GLOBAL  uma caixa só, procura em TODAS as dimensões ao mesmo
  *                  tempo e devolve agrupado por onde achou. Quem digita
  *                  "pão" não sabe (nem precisa saber) se pão é produto ou
  *                  categoria — e aqui descobre que é os dois.
  *
- *    PÍLULAS       uma por dimensão, abre a lista com busca própria, o
- *                  tri-estado e o valor de cada item.
+ *    AÇÕES         aparecem só quando há seleção. Nada de botão morto
+ *                  ocupando espaço nobre no topo da coluna.
+ *
+ *    CAIXAS        uma por dimensão, empilhadas, cada uma com busca
+ *                  própria, tri-estado e o valor de cada item. É a lista
+ *                  inteira na tela, não um menu que abre e fecha.
  *
  *  DECISÃO QUE MANDA NO RESTO DO ARQUIVO: a lista do filtro usa SEMPRE o
  *  skip (`pularPropria = true`), em qualquer modo de leitura.
  *
- *  Sem isso, no modo Foco, abrir o filtro de Categoria com uma categoria
+ *  Sem isso, no modo Foco, a caixa de Categoria com uma categoria
  *  selecionada mostraria só ela — e não haveria como marcar a segunda. Uma
  *  caixa de filtro que esconde o que você ainda pode escolher não é filtro:
  *  é um beco. O modo de leitura manda nos gráficos; na caixa de filtro,
@@ -45,10 +49,20 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
  *  que cortou. */
 const TETO_LISTA = 300;
 
-let ctx = null;          // { M, ROTULO_DIM, valorDaMedida, render }
-let aberta = null;       // dimensão com o popover aberto
-const buscaDe = {};      // texto digitado dentro de cada popover
+/*  Quantas caixas nascem abertas.
+ *
+ *  Todas abertas com seis dimensões dá uma coluna de três telas de altura,
+ *  e a pessoa rola sem achar nada. Todas fechadas esconde a informação e
+ *  transforma o painel numa gaveta. As três primeiras são as que o usuário
+ *  mais usa (unidade, categoria, produto) e as outras ficam a um clique. */
+const ABERTAS_DE_SAIDA = 3;
+
+let ctx = null;              // { M, ROTULO_DIM, medidaAtual, valorDaMedida, render }
+const buscaDe = {};          // texto digitado dentro de cada caixa
+const fechada = {};          // dimensões recolhidas pelo usuário
 let buscaGlobal = '';
+let lateralAberta = false;   // só vale em tela estreita
+let focoPendente = null;     // qual campo devolver o cursor após redesenhar
 
 const $ = (id) => document.getElementById(id);
 
@@ -78,91 +92,97 @@ function filtrar(itens, texto) {
 /** Concordância do botão: "Marcar 1 encontrado" / "Marcar os 3 encontrados". */
 function rotuloMarcar(n, buscando) {
   if (!n) return 'Nada para marcar';
-  const palavra = buscando ? 'encontrado' : 'possível';
-  if (n === 1) return `Marcar 1 ${palavra}`;
+  if (n === 1) return `Marcar 1 ${buscando ? 'encontrado' : 'possível'}`;
   return `Marcar os ${n} ${buscando ? 'encontrados' : 'possíveis'}`;
 }
 
 /* ------------------------------------------------------------------ */
-/* Pílulas                                                             */
+/* Caixas                                                              */
 /* ------------------------------------------------------------------ */
 
-export function desenharFiltros() {
+function caixaDe(dim, ordem) {
   const { M, ROTULO_DIM } = ctx;
+  const rot = ROTULO_DIM[dim] || dim;
+  const sel = M.sel[dim];
+  const texto = buscaDe[dim] || '';
 
-  $('pilulas').innerHTML = M.dims.map((dim) => {
-    const sel = M.sel[dim];
-    const n = sel.size;
-    const rot = ROTULO_DIM[dim] || dim;
-    const resumo = n === 0 ? ''
-      : n === 1 ? `: ${esc(M.rotulos[dim][[...sel][0]])}`
-      : `: ${n} escolhidos`;
-    return `<button type="button" class="pilula${n ? ' ativa' : ''}${aberta === dim ? ' aberta' : ''}"
-              data-abrir="${esc(dim)}" aria-expanded="${aberta === dim}">
-        ${esc(rot)}${resumo}<i class="seta" aria-hidden="true"></i>
-      </button>`;
-  }).join('');
+  //  Uma caixa com seleção NUNCA fica fechada: esconder um filtro que está
+  //  ativo é a forma mais rápida de alguém olhar um número errado e não
+  //  entender por quê.
+  const aberto = sel.size > 0 || (dim in fechada ? !fechada[dim] : ordem < ABERTAS_DE_SAIDA);
 
-  const pop = $('pop');
-  if (!aberta) { pop.hidden = true; pop.innerHTML = ''; return; }
+  const cabecalho = `
+    <button type="button" class="cx-cab${sel.size ? ' tem-sel' : ''}" data-dobrar="${esc(dim)}"
+            aria-expanded="${aberto}">
+      <i class="cx-seta" aria-hidden="true"></i>
+      <span class="cx-nome">${esc(rot)}</span>
+      ${sel.size ? `<span class="cx-conta">${sel.size}</span>` : ''}
+    </button>`;
 
-  const itens = itensDe(aberta);
-  const texto = buscaDe[aberta] || '';
+  if (!aberto) return `<section class="caixa">${cabecalho}</section>`;
+
+  const itens = itensDe(dim);
   const achados = filtrar(itens, texto);
   const cortou = achados.length > TETO_LISTA;
   const mostra = cortou ? achados.slice(0, TETO_LISTA) : achados;
   const possiveis = itens.filter((x) => x.estado !== 'excluido').length;
-
-  //  Quantos o botão de marcar realmente acrescentaria. Precisa estar aqui
-  //  porque o botão desliga quando o número é zero — sem isso, buscar algo
-  //  que não existe e clicar em "marcar" chamava `selecionar(dim, [])`, que
-  //  LIMPA a dimensão. Um botão que apaga o trabalho de quem clicou quando
-  //  não encontra nada é pior que um botão que não faz nada.
   const aMarcar = achados.filter((x) => x.estado === 'possivel').length;
+
+  //  A busca própria só aparece quando a lista é grande o bastante para
+  //  justificar. Numa dimensão de 4 valores (forma de pagamento) o campo
+  //  seria mais alto que a lista que ele filtra.
+  const temBusca = itens.length > 8;
 
   const lista = mostra.length
     ? mostra.map((x) => `
-      <button type="button" class="pop-item ${x.estado}" data-fdim="${esc(aberta)}" data-fcod="${x.codigo}"
-              aria-pressed="${x.estado === 'selecionado'}">
+      <button type="button" class="cx-item ${x.estado}" data-fdim="${esc(dim)}" data-fcod="${x.codigo}"
+              aria-pressed="${x.estado === 'selecionado'}" title="${esc(x.rotulo)}">
         <i class="marca" aria-hidden="true"></i>
-        <span class="pop-rot">${esc(x.rotulo)}</span>
-        <b class="pop-val">${x.estado === 'excluido' ? '—' : ctx.valorDaMedida(x.valor)}</b>
+        <span class="cx-rot">${esc(x.rotulo)}</span>
+        <b class="cx-val">${x.estado === 'excluido' ? '—' : ctx.valorDaMedida(x.valor)}</b>
       </button>`).join('')
-    : `<p class="pop-vazio">Nada encontrado para <b>${esc(texto)}</b>.</p>`;
+    : `<p class="cx-vazio">Nada para <b>${esc(texto)}</b>.</p>`;
 
-  pop.hidden = false;
-  pop.innerHTML = `
-    <div class="pop-topo">
-      <input type="search" class="pop-busca" id="pop-busca" placeholder="Buscar em ${esc((ctx.ROTULO_DIM[aberta] || aberta).toLowerCase())}…"
-             value="${esc(texto)}" autocomplete="off" spellcheck="false">
-      <button type="button" class="pop-fechar" data-fechar="1" aria-label="Fechar">✕</button>
+  return `<section class="caixa aberta">
+    ${cabecalho}
+    <div class="cx-corpo">
+      ${temBusca ? `<input type="search" class="cx-busca" data-busca="${esc(dim)}"
+             placeholder="Buscar…" value="${esc(texto)}" autocomplete="off" spellcheck="false"
+             aria-label="Buscar em ${esc(rot.toLowerCase())}">` : ''}
+      <p class="cx-cont">${possiveis} de ${itens.length}${texto ? ` · ${achados.length} na busca` : ''}</p>
+      <div class="cx-lista">${lista}</div>
+      ${cortou ? `<p class="cx-corte">Mostrando ${TETO_LISTA} de ${achados.length}. Refine a busca.</p>` : ''}
+      <div class="cx-acoes">
+        <button type="button" data-facao="possiveis" data-fdim2="${esc(dim)}"${aMarcar ? '' : ' disabled'}>${rotuloMarcar(aMarcar, !!texto)}</button>
+        ${sel.size ? `<button type="button" data-facao="limpar" data-fdim2="${esc(dim)}">Limpar</button>` : ''}
+      </div>
     </div>
-    <p class="pop-cont">${possiveis} de ${itens.length} possíveis${texto ? ` · ${achados.length} na busca` : ''}</p>
-    <div class="pop-lista">${lista}</div>
-    ${cortou ? `<p class="pop-corte">Mostrando ${TETO_LISTA} de ${achados.length}. Refine a busca.</p>` : ''}
-    <div class="pop-acoes">
-      <button type="button" data-facao="possiveis"${aMarcar ? '' : ' disabled'}>${rotuloMarcar(aMarcar, !!texto)}</button>
-      <button type="button" data-facao="limpar"${M.sel[aberta].size ? '' : ' disabled'}>Limpar esta</button>
-    </div>`;
+  </section>`;
+}
 
-  //  O popover nasce embaixo da pílula que foi clicada, não no canto.
-  //  Com seis pílulas numa linha, abrir sempre à esquerda desconecta a
-  //  lista do botão: a pessoa clica em "Produto" e a caixa aparece sob
-  //  "Unidade", e por um instante ela não sabe o que está lendo.
-  const botao = document.querySelector(`[data-abrir="${aberta}"]`);
-  if (botao) {
-    const caixa = $('filtros').getBoundingClientRect();
-    const b = botao.getBoundingClientRect();
-    //  Preso dentro da barra: encostar na borda é melhor que vazar para
-    //  fora da tela e virar rolagem horizontal.
-    const limite = Math.max(0, caixa.width - pop.offsetWidth);
-    pop.style.left = `${Math.min(Math.max(0, b.left - caixa.left), limite)}px`;
-  }
+export function desenharFiltros() {
+  const { M } = ctx;
 
-  const campo = $('pop-busca');
-  if (campo) {
-    campo.focus();
-    campo.setSelectionRange(campo.value.length, campo.value.length);
+  $('caixas').innerHTML = M.dims.map((dim, i) => caixaDe(dim, i)).join('');
+
+  const total = M.dims.reduce((s, d) => s + M.sel[d].size, 0);
+  const acoes = $('lateral-acoes');
+  acoes.hidden = !total;
+  acoes.innerHTML = total
+    ? `<span>${total} valor${total > 1 ? 'es' : ''} filtrado${total > 1 ? 's' : ''}</span>
+       <button type="button" data-facao="tudo">Limpar tudo</button>`
+    : '';
+
+  $('abre-cont').textContent = total ? ` ${total}` : '';
+  $('abre-filtros').classList.toggle('tem-sel', !!total);
+
+  //  O innerHTML destrói o campo em foco a cada tecla digitada. Devolver o
+  //  cursor é obrigatório, não polimento: sem isso a pessoa digita uma
+  //  letra e perde o teclado.
+  if (focoPendente) {
+    const campo = document.querySelector(`[data-busca="${focoPendente}"]`);
+    if (campo) { campo.focus(); campo.setSelectionRange(campo.value.length, campo.value.length); }
+    focoPendente = null;
   }
 }
 
@@ -177,7 +197,7 @@ function desenharBusca() {
 
   const { M, ROTULO_DIM } = ctx;
   const grupos = M.dims.map((dim) => {
-    const achados = filtrar(itensDe(dim), texto).slice(0, 8);
+    const achados = filtrar(itensDe(dim), texto).slice(0, 6);
     return achados.length ? { dim, achados } : null;
   }).filter(Boolean);
 
@@ -193,80 +213,88 @@ function desenharBusca() {
       <div class="busca-itens">${g.achados.map((x) => `
         <button type="button" class="busca-item ${x.estado}" data-fdim="${esc(g.dim)}" data-fcod="${x.codigo}">
           ${esc(x.rotulo)}
-          <b>${x.estado === 'excluido' ? '—' : ctx.valorDaMedida(x.valor)}</b>
         </button>`).join('')}</div>
     </div>`).join('');
+}
+
+/* ------------------------------------------------------------------ */
+/* Lateral em tela estreita                                            */
+/* ------------------------------------------------------------------ */
+
+function abrirLateral(sim) {
+  lateralAberta = sim;
+  $('filtros').classList.toggle('aberta', sim);
+  $('veu').hidden = !sim;
+  $('abre-filtros').setAttribute('aria-expanded', String(sim));
+  document.body.classList.toggle('sem-rolagem', sim);
 }
 
 /* ------------------------------------------------------------------ */
 /* Eventos                                                             */
 /* ------------------------------------------------------------------ */
 
-function fechar() { aberta = null; desenharFiltros(); }
-
 function ligar() {
   document.addEventListener('click', (e) => {
-    const abrir = e.target.closest('[data-abrir]');
-    if (abrir) {
-      const dim = abrir.dataset.abrir;
-      aberta = aberta === dim ? null : dim;
+    if (e.target.closest('#abre-filtros')) { abrirLateral(!lateralAberta); return; }
+    if (e.target.closest('#fecha-lateral') || e.target.closest('#veu')) { abrirLateral(false); return; }
+
+    const dobrar = e.target.closest('[data-dobrar]');
+    if (dobrar) {
+      const dim = dobrar.dataset.dobrar;
+      const i = ctx.M.dims.indexOf(dim);
+      const estavaAberto = dim in fechada ? !fechada[dim] : i < ABERTAS_DE_SAIDA;
+      fechada[dim] = estavaAberto;
       desenharFiltros();
       return;
     }
 
-    if (e.target.closest('[data-fechar]')) { fechar(); return; }
-
     const item = e.target.closest('[data-fdim][data-fcod]');
     if (item) {
       ctx.M.alternar(item.dataset.fdim, Number(item.dataset.fcod));
-      ctx.render();
-      //  O popover fica ABERTO depois do clique, de propósito: marcar três
-      //  categorias é o caso normal, e fechar a cada marca obrigaria a
-      //  reabrir três vezes. A busca global, ao contrário, fecha — ali o
-      //  gesto é "achar uma coisa específica".
+      //  Achou na busca global, selecionou: a lista de resultados some.
+      //  Ali o gesto é "achar uma coisa específica" e ela já foi achada.
+      //  Na caixa da dimensão a lista FICA, porque marcar três categorias
+      //  seguidas é o caso normal.
       if (item.classList.contains('busca-item')) {
         buscaGlobal = ''; $('busca-global').value = '';
         desenharBusca();
       }
-      return;
-    }
-
-    const acao = e.target.closest('[data-facao]');
-    if (acao && aberta) {
-      const dim = aberta;
-      if (acao.dataset.facao === 'limpar') {
-        ctx.M.limpar(dim);
-      } else {
-        const texto = buscaDe[dim] || '';
-        const novos = filtrar(itensDe(dim), texto)
-          .filter((x) => x.estado !== 'excluido')
-          .map((x) => x.codigo);
-        if (!novos.length) return;
-        //  SOMA ao que já estava marcado, não substitui.
-        //
-        //  Refinar em duas buscas é o uso normal da caixa: procura "pão",
-        //  marca; procura "bolo", marca. Substituindo, a segunda marcação
-        //  apagaria a primeira em silêncio — e o usuário só descobriria
-        //  olhando o total mudar para menos.
-        //
-        //  `selecionar` troca a seleção inteira de uma vez; passo a união.
-        //  Chamar `alternar` em laço daria o mesmo e recalcularia a máscara
-        //  a cada item, além de DESmarcar o que já estava marcado.
-        ctx.M.selecionar(dim, [...new Set([...ctx.M.sel[dim], ...novos])]);
-      }
       ctx.render();
       return;
     }
 
-    //  Clique fora fecha. O teste é pelo container inteiro, não pelo
-    //  popover: clicar na própria pílula já é tratado acima, e clicar na
-    //  barra (no espaço vazio entre pílulas) não deve fechar.
-    if (aberta && !e.target.closest('#filtros')) fechar();
+    const acao = e.target.closest('[data-facao]');
+    if (acao) {
+      const tipo = acao.dataset.facao;
+      if (tipo === 'tudo') {
+        ctx.M.limpar();
+      } else {
+        const dim = acao.dataset.fdim2;
+        if (tipo === 'limpar') {
+          ctx.M.limpar(dim);
+        } else {
+          const novos = filtrar(itensDe(dim), buscaDe[dim] || '')
+            .filter((x) => x.estado === 'possivel')
+            .map((x) => x.codigo);
+          if (!novos.length) return;
+          //  SOMA ao que já estava marcado, não substitui.
+          //
+          //  Refinar em duas buscas é o uso normal da caixa: procura "pão",
+          //  marca; procura "bolo", marca. Substituindo, a segunda marcação
+          //  apagaria a primeira em silêncio — e o usuário só descobriria
+          //  olhando o total mudar para menos.
+          ctx.M.selecionar(dim, [...new Set([...ctx.M.sel[dim], ...novos])]);
+        }
+      }
+      ctx.render();
+    }
   });
 
   document.addEventListener('input', (e) => {
-    if (e.target.id === 'pop-busca') {
-      buscaDe[aberta] = e.target.value;
+    if (e.target.dataset && e.target.dataset.busca) {
+      const dim = e.target.dataset.busca;
+      buscaDe[dim] = e.target.value;
+      focoPendente = dim;
       desenharFiltros();
     } else if (e.target.id === 'busca-global') {
       buscaGlobal = e.target.value;
@@ -276,13 +304,14 @@ function ligar() {
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-      if (aberta) { fechar(); return; }
-      if (buscaGlobal) { buscaGlobal = ''; $('busca-global').value = ''; desenharBusca(); }
+      if (buscaGlobal) { buscaGlobal = ''; $('busca-global').value = ''; desenharBusca(); return; }
+      if (lateralAberta) abrirLateral(false);
       return;
     }
     //  Enter na busca global seleciona o primeiro resultado. É o atalho de
     //  quem sabe o que procura: digita "pao", Enter, pronto.
     if (e.key === 'Enter' && e.target.id === 'busca-global') {
+      e.preventDefault();
       const primeiro = $('busca-res').querySelector('.busca-item');
       if (primeiro) primeiro.click();
     }
