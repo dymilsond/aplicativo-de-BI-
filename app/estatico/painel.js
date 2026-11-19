@@ -13,6 +13,8 @@
 
 import { Motor } from './motor.js';
 
+import { iniciarFiltros, atualizarFiltros } from './filtros.js';
+
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -879,6 +881,7 @@ function render() {
   desenharHoras();
   desenharSemana();
   desenharTabela();
+  atualizarFiltros();
   $('tempo').textContent = `${(performance.now() - t0).toFixed(0)} ms`;
 }
 
@@ -961,5 +964,15 @@ export async function iniciar() {
   $('painel').hidden = false;
 
   ligarEventos();
+  //  O filtro recebe o que precisa do painel em vez de importar de volta:
+  //  dependência num sentido só. `medidaAtual` é função, não valor, porque
+  //  a medida muda e o filtro tem que ler a vigente, não a do carregamento.
+  iniciarFiltros({
+    M,
+    ROTULO_DIM,
+    medidaAtual: () => (MEDIDAS[medida].derivada ? 'receita' : medida),
+    valorDaMedida,
+    render,
+  });
   render();
 }
