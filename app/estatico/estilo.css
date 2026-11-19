@@ -124,24 +124,38 @@ h2:first-child { margin-top: 0; }
 .colunas { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
 @media (max-width: 900px) { .colunas { grid-template-columns: minmax(0, 1fr); } }
 
-/*  O grid que se reparte sozinho. `auto-fit` + `minmax` faz a conta de
-    quantas colunas cabem sem uma media query por faixa de tela: abaixo de
-    ~700 px dá 1, até ~1100 dá 2, até ~1500 dá 3, acima disso 4.
-    340 px é o piso em que uma barra com nome, trilho e valor ainda é
-    legível; abaixo disso o nome vira reticências. */
+/*  LAYOUT DOS CARTÕES — três tentativas até acertar, e por quê.
+ *
+ *  1ª: `auto-fit` + um cartão com `span 2`. Dá 5 unidades de grid para 4
+ *      colunas, e o último cartão cai sozinho numa linha com TRÊS colunas
+ *      de branco ao lado.
+ *
+ *  2ª: layout desenhado, empilhando os dois cartões mais baixos numa
+ *      coluna. O buraco saiu do grid e foi para DENTRO dos cartões: a
+ *      coluna empilhada tem 711 px, Produtos tem 421, e esticar um para
+ *      alcançar o outro deixou 307 px de branco com borda em volta — que
+ *      parece defeito, não respiro. Tentei preencher fazendo a lista
+ *      crescer, mas Produtos tem 36 itens e acabou: não há o que mostrar.
+ *
+ *  3ª, esta: COLUNAS IGUAIS, nenhum `span`, nenhum cartão esticado.
+ *      O número de colunas é escolhido para os cartões caberem EXATO —
+ *      4 cartões em 1, 2 ou 4 colunas, nunca em 3, porque 3 deixa dois
+ *      buracos na segunda linha. `align-items: start` faz cada cartão
+ *      terminar onde o conteúdo termina: zero branco dentro, e a
+ *      diferença de altura fica no pé, entre blocos, onde lê como
+ *      espaçamento normal de painel.
+ *
+ *  O corte em 1760 px não é redondo por acaso: descontando o padding da
+ *  página (40) e a coluna de filtros (272 + 18), sobram 1430 px, que em
+ *  4 colunas dá 345 px cada — o mínimo em que uma barra com nome, trilho
+ *  e valor ainda se lê sem reticências. */
 .painel-cartoes {
   display: grid; gap: 16px; margin-bottom: 16px;
-  /*  `min(340px, 100%)` em vez de `340px`: numa tela de 320 px o piso de
-      340 seria maior que a tela e o grid estouraria. O `min` faz o piso
-      ceder quando a tela é menor que ele. */
-  grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr));
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
 }
-
-/*  A lista de produtos é a mais alta do conjunto. Numa coluna estreita as
-    barras viram tocos e a comparação some, então ela pede duas — mas só
-    quando há pelo menos duas para dar. */
-@media (min-width: 1180px) { .painel-cartoes .duplo { grid-column: span 2; } }
+@media (min-width: 760px)  { .painel-cartoes { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1760px) { .painel-cartoes { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 
 /*  "Movimento ao longo do dia" e a tabela só ficam lado a lado em tela
     larga: a tabela tem cinco colunas de número e, espremida, começa a
@@ -267,7 +281,14 @@ tbody tr:hover { background: #f8fafc; }
 /* ---- barras com tri-estado ---- */
 .barras { display: flex; flex-direction: column; gap: 3px; }
 .barras.rolagem { max-height: 360px; overflow-y: auto; }
-.barra { display: grid; grid-template-columns: minmax(96px, 34%) 1fr auto; align-items: center; gap: 10px;
+/*  O nome leva 44% da barra, não 34%.
+ *
+ *  Com 34%, "Queijo Mussarela (kg)" virava "Queijo Mussarel..." em quatro
+ *  colunas — e um nome cortado num painel de vendas é pior que um trilho
+ *  curto: o trilho só precisa mostrar PROPORÇÃO, e isso ele faz em
+ *  qualquer comprimento; o nome precisa identificar o produto, e cortado
+ *  não identifica nada. */
+.barra { display: grid; grid-template-columns: minmax(96px, 44%) 1fr auto; align-items: center; gap: 10px;
          background: transparent; border: 0; border-radius: 7px; padding: 6px 8px; cursor: pointer; font: inherit; text-align: left; width: 100%; }
 .barra:hover { background: #f1f5f9; }
 .barra-nome { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
