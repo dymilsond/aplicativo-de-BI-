@@ -970,8 +970,9 @@ export async function iniciar() {
   iniciarFiltros({
     M,
     ROTULO_DIM,
+    //  A medida serve só para ORDENAR a lista do filtro (o maior no topo).
+    //  O valor em si não é mostrado lá — ver o comentário em `itensDe`.
     medidaAtual: () => (MEDIDAS[medida].derivada ? 'receita' : medida),
-    valorDaMedida,
     render,
   });
   render();

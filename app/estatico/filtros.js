@@ -57,7 +57,7 @@ const TETO_LISTA = 300;
  *  mais usa (unidade, categoria, produto) e as outras ficam a um clique. */
 const ABERTAS_DE_SAIDA = 3;
 
-let ctx = null;              // { M, ROTULO_DIM, medidaAtual, valorDaMedida, render }
+let ctx = null;              // { M, ROTULO_DIM, medidaAtual, render }
 const buscaDe = {};          // texto digitado dentro de cada caixa
 const fechada = {};          // dimensões recolhidas pelo usuário
 let buscaGlobal = '';
@@ -70,7 +70,21 @@ const $ = (id) => document.getElementById(id);
 /* Leitura                                                             */
 /* ------------------------------------------------------------------ */
 
-/** Itens de uma dimensão, sempre com skip, ordenados para a caixa. */
+/*  Itens de uma dimensão, sempre com skip, ordenados para a caixa.
+ *
+ *  A lista NÃO mostra o valor de cada item, e isso é decisão, não
+ *  esquecimento. Três motivos:
+ *
+ *  1. É redundante — os gráficos à direita já mostram o valor, maiores e
+ *     com contexto. Repetir o número numa coluna de 272 px só compete com
+ *     o nome pela atenção.
+ *  2. É enganoso — com o skip, o valor exibido é "quanto seria se eu
+ *     selecionasse só isto", e ninguém lê assim: lê como valor atual.
+ *  3. Custa o espaço do nome — "Queijo Mussarela (kg)" vinha truncado para
+ *     caber um "R$ 2,2 mi" ao lado.
+ *
+ *  A ORDEM por tamanho fica: é o que torna a lista útil (o produto grande
+ *  no topo) e não custa um pixel. */
 function itensDe(dim) {
   const { M } = ctx;
   return M.estado(dim, ctx.medidaAtual(), true).sort((a, b) =>
@@ -139,7 +153,6 @@ function caixaDe(dim, ordem) {
               aria-pressed="${x.estado === 'selecionado'}" title="${esc(x.rotulo)}">
         <i class="marca" aria-hidden="true"></i>
         <span class="cx-rot">${esc(x.rotulo)}</span>
-        <b class="cx-val">${x.estado === 'excluido' ? '—' : ctx.valorDaMedida(x.valor)}</b>
       </button>`).join('')
     : `<p class="cx-vazio">Nada para <b>${esc(texto)}</b>.</p>`;
 
