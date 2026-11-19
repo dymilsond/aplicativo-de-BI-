@@ -614,7 +614,22 @@ function pintarEvolucao(jan, fx) {
   const { piso, teto } = fx;
   const amp = Math.max(1e-9, teto - piso);
   const pontos = evoPontos;
-  const L = 760, A = 250, ml = 62, mr = 14, mt = 16, mb = 36;
+
+  /*  O viewBox acompanha a largura REAL do container, em vez de ser fixo
+   *  em 760.
+   *
+   *  Um SVG com viewBox escala tudo junto — inclusive a tipografia. Com
+   *  760 fixo num monitor de 2560 px, o fator vira 2,3: a fonte de 10,5
+   *  do eixo é desenhada com 24 px na tela, e a altura de 250 vira 580 px
+   *  de cartão quase vazio. Casando o viewBox com o pixel real, 1 unidade
+   *  = 1 pixel e os tamanhos ficam como foram escritos.
+   *
+   *  O piso de 560 é para o SVG não degenerar antes de o CSS entrar em
+   *  modo estreito; o teto de 1800 evita um gráfico tão largo que o olho
+   *  perde a linha ao varrer de ponta a ponta. */
+  const caixa = $('evolucao').clientWidth || 760;
+  const L = Math.min(1800, Math.max(560, caixa));
+  const A = 250, ml = 62, mr = 14, mt = 16, mb = 36;
   const larg = L - ml - mr;
   const vao = jan.fim - jan.ini;
   //  Janela de um ponto só (contexto 0): não há vão para distribuir, então o
@@ -746,7 +761,7 @@ function pintarEvolucao(jan, fx) {
     }
   }
 
-  $('evolucao').innerHTML = `<svg viewBox="0 0 ${L} ${A}" role="img" aria-label="Evolução mensal">
+  $('evolucao').innerHTML = `<svg viewBox="0 0 ${L} ${A}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Evolução mensal">
     <defs><clipPath id="corte-evo"><rect x="${ml}" y="0" width="${larg}" height="${A}"/></clipPath></defs>
     ${g}<g clip-path="url(#corte-evo)">${serie}</g></svg>`;
 
@@ -890,6 +905,17 @@ function render() {
 /* ------------------------------------------------------------------ */
 
 function ligarEventos() {
+  /*  O viewBox do gráfico de evolução depende da largura do container,
+   *  então mudar o tamanho da janela exige redesenhar — senão o SVG fica
+   *  esticado ou comprimido pelo navegador, com a tipografia junto.
+   *  Com espera: `resize` dispara dezenas de vezes por arrasto, e cada
+   *  render completo varre o cubo. */
+  let esperaResize = 0;
+  window.addEventListener('resize', () => {
+    clearTimeout(esperaResize);
+    esperaResize = setTimeout(() => { if (M) render(); }, 150);
+  });
+
   document.addEventListener('click', (e) => {
     const alvo = e.target.closest('[data-dim][data-cod]');
     if (alvo) {

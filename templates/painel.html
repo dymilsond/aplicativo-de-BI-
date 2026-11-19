@@ -62,7 +62,10 @@
     <div id="evolucao" class="grafico-svg"></div>
   </article>
 
-  <div class="colunas">
+  <!-- Um grid só, que se reparte sozinho conforme a largura: 1 coluna no
+       celular, 2 no notebook, 3 a 4 em tela larga. Antes eram dois blocos
+       fixos de duas colunas, e em 2560 px sobrava meia tela em branco. -->
+  <div class="painel-cartoes">
     <article class="painel-cartao">
       <div class="cartao-cab"><h3>Categoria</h3><span class="cont" id="cat-cont"></span></div>
       <div id="cat" class="barras"></div>
@@ -71,10 +74,9 @@
       <div class="cartao-cab"><h3>Forma de pagamento</h3></div>
       <div id="pag"></div>
     </article>
-  </div>
-
-  <div class="colunas">
-    <article class="painel-cartao">
+    <!-- A lista de produtos é a mais alta do conjunto; em tela larga ela
+         ocupa duas colunas para as barras não virarem tocos. -->
+    <article class="painel-cartao duplo">
       <div class="cartao-cab"><h3>Produtos</h3><span class="cont" id="prod-cont"></span></div>
       <div id="prod" class="barras rolagem"></div>
     </article>
@@ -86,26 +88,28 @@
     </article>
   </div>
 
-  <article class="painel-cartao">
-    <div class="cartao-cab">
-      <h3>Movimento ao longo do dia</h3>
-      <span class="cont">segue o período, não a seleção de produto</span>
-    </div>
-    <div id="horas"></div>
-  </article>
+  <div class="colunas larga">
+    <article class="painel-cartao">
+      <div class="cartao-cab">
+        <h3>Movimento ao longo do dia</h3>
+        <span class="cont">segue o período, não a seleção de produto</span>
+      </div>
+      <div id="horas"></div>
+    </article>
 
-  <article class="painel-cartao">
-    <div class="cartao-cab"><h3>Produtos em detalhe</h3><span class="cont">clique na linha para filtrar</span></div>
-    <div class="rolagem-tabela">
-      <table class="tab-produtos">
-        <thead>
-          <tr><th>Produto</th><th class="n">Quantidade</th><th class="n">Faturamento</th>
-              <th class="n">Lucro bruto</th><th class="n">Margem</th></tr>
-        </thead>
-        <tbody id="tabela"></tbody>
-      </table>
-    </div>
-  </article>
+    <article class="painel-cartao">
+      <div class="cartao-cab"><h3>Produtos em detalhe</h3><span class="cont">clique na linha para filtrar</span></div>
+      <div class="rolagem-tabela">
+        <table class="tab-produtos">
+          <thead>
+            <tr><th>Produto</th><th class="n">Quantidade</th><th class="n">Faturamento</th>
+                <th class="n">Lucro bruto</th><th class="n">Margem</th></tr>
+          </thead>
+          <tbody id="tabela"></tbody>
+        </table>
+      </div>
+    </article>
+  </div>
 
     </div><!-- /.conteudo -->
   </div><!-- /.painel-grid -->

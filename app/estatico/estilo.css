@@ -68,7 +68,15 @@ body {
 .menu a:hover { color: var(--texto); }
 .menu a.ativo { color: var(--marca); border-bottom-color: var(--marca); }
 
-main { padding: 20px; max-width: 1400px; margin: 0 auto; }
+/*  Antes: 1400 px travados. Num monitor de 2560 px isso deixava 1160 px
+    de branco — mais de um terço da tela paga pelo cliente sem uso.
+
+    O teto ainda existe (2100 px) porque largura infinita tem custo: o
+    olho perde a linha ao varrer um gráfico de 2,5 m de ponta a ponta, e
+    o cabeçalho da tabela sai do campo de visão do rodapé. O ganho de
+    largura vai para MAIS CARTÃO POR LINHA, não para esticar o mesmo
+    cartão — é o que corta rolagem de verdade. */
+main { padding: 20px; max-width: 2100px; margin: 0 auto; }
 footer { padding: 24px 20px; text-align: center; color: var(--suave); font-size: 12px; }
 
 /* ---------- blocos ---------- */
@@ -105,8 +113,48 @@ h2:first-child { margin-top: 0; }
 .painel h3 { margin: 0 0 4px; font-size: 15px; }
 .painel .explica { margin: 0 0 14px; color: var(--suave); font-size: 13px; }
 
-.colunas { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-@media (max-width: 900px) { .colunas { grid-template-columns: 1fr; } }
+/*  `minmax(0, 1fr)` e não `1fr`.
+ *
+ *  O padrão de uma coluna `1fr` é `minmax(auto, 1fr)`, e `auto` significa
+ *  "nunca menor que o conteúdo". Um filho largo — a curva de 18 colunas de
+ *  hora, uma tabela de cinco colunas — empurra a coluna além da tela e a
+ *  PÁGINA INTEIRA passa a rolar na horizontal. O zero no mínimo autoriza o
+ *  grid a encolher e deixa a rolagem acontecer dentro do cartão, onde ela
+ *  é inofensiva. Vale para todo grid deste arquivo. */
+.colunas { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 900px) { .colunas { grid-template-columns: minmax(0, 1fr); } }
+
+/*  O grid que se reparte sozinho. `auto-fit` + `minmax` faz a conta de
+    quantas colunas cabem sem uma media query por faixa de tela: abaixo de
+    ~700 px dá 1, até ~1100 dá 2, até ~1500 dá 3, acima disso 4.
+    340 px é o piso em que uma barra com nome, trilho e valor ainda é
+    legível; abaixo disso o nome vira reticências. */
+.painel-cartoes {
+  display: grid; gap: 16px; margin-bottom: 16px;
+  /*  `min(340px, 100%)` em vez de `340px`: numa tela de 320 px o piso de
+      340 seria maior que a tela e o grid estouraria. O `min` faz o piso
+      ceder quando a tela é menor que ele. */
+  grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr));
+  align-items: start;
+}
+
+/*  A lista de produtos é a mais alta do conjunto. Numa coluna estreita as
+    barras viram tocos e a comparação some, então ela pede duas — mas só
+    quando há pelo menos duas para dar. */
+@media (min-width: 1180px) { .painel-cartoes .duplo { grid-column: span 2; } }
+
+/*  "Movimento ao longo do dia" e a tabela só ficam lado a lado em tela
+    larga: a tabela tem cinco colunas de número e, espremida, começa a
+    rolar na horizontal — que é pior que rolar na vertical. */
+.colunas.larga { grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 1500px) {
+  .colunas.larga { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  /*  Sem isto, o cartão da curva do dia estica para igualar a altura da
+      tabela ao lado e fica com 300 px de branco embaixo. Alinhado ao topo
+      ele ocupa o que precisa — buraco entre cartões é melhor que buraco
+      dentro de um. */
+  .colunas.larga { align-items: start; }
+}
 
 .grafico { width: 100%; height: 300px; }
 .grafico.alto { height: 360px; }
@@ -272,7 +320,11 @@ tbody tr:hover { background: #f8fafc; }
 .alvo { cursor: pointer; }
 
 /* ---- colunas por hora ---- */
-.colunas-hora { display: flex; align-items: flex-end; gap: 4px; height: 150px; }
+/*  Em tela estreita 18 colunas não cabem com rótulo legível. A curva rola
+    dentro do próprio cartão — rolagem local é incômodo, rolagem da página
+    inteira para a direita é defeito. */
+.colunas-hora { display: flex; align-items: flex-end; gap: 4px; height: 150px; overflow-x: auto; }
+.col-hora { flex: 1 0 20px; }
 .col-hora { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; gap: 5px; }
 .col-barra { display: block; width: 100%; background: var(--marca); border-radius: 4px 4px 0 0; min-height: 2px;
   transition: height .42s cubic-bezier(.22, .61, .36, 1); }
