@@ -40,44 +40,109 @@ const ROTULO_DIM = {
 };
 
 /* ------------------------------------------------------------------ */
-/* ZOOM — o que acontece com o gráfico quando você seleciona            */
+/* MODO DE LEITURA — o que acontece quando você seleciona               */
 /* ------------------------------------------------------------------ */
 /*
- *  Padrão: a marca selecionada fica sozinha, ocupando o gráfico inteiro,
- *  com a escala reajustada a ela. As outras saem. É o comportamento de uma
- *  ferramenta de BI comum, e foi o pedido — decisão do Eddy, registrada
- *  aqui porque o bloco todo existe para ser mudado sem mexer em mais nada.
+ *  Dois modos, e eles não são "zoom ligado/desligado". São duas perguntas
+ *  diferentes, e o nome do botão é a pergunta:
  *
- *  O que cada chave faz:
+ *    FOCO      só a marca escolhida, tela limpa.
+ *              Para olhar um número ou mostrar para alguém.
  *
- *    contexto: 0   só a marca escolhida (PADRÃO)
- *    contexto: 1   escolhida ± 1 mês, ainda com vizinho para comparar
- *    contexto: 3   escolhida ± 3 meses
+ *    COMPARAR  tudo continua na tela, o que saiu da seleção fica cinza,
+ *              e a linha aproxima com três meses de cada lado.
+ *              Para explorar e entender a própria base.
  *
- *    ocultarExcluidos: true   o que saiu da seleção some da tela (PADRÃO)
- *                      false  fica cinza, mostrando o que existe na base
+ *  Chamar de "zoom" obrigaria o usuário a saber o que a chave faz por
+ *  dentro antes de escolher. Chamando pela intenção, ele escolhe certo
+ *  sem saber nada.
  *
- *    pularPropria: false  a dimensão se filtra a si mesma, então selecionar
- *                         uma categoria deixa só ela no gráfico (PADRÃO)
- *                  true   a dimensão é excluída da própria máscara: os
- *                         números dela não mudam ao selecionar dentro dela
+ *  O que cada chave do preset controla:
  *
- *    ligado: false  desliga tudo, nada se move na seleção
+ *    contexto          meses visíveis de cada lado do escolhido
+ *    ocultarExcluidos  true: o que saiu some · false: fica cinza
+ *    pularPropria      false: a dimensão se filtra a si mesma, então
+ *                             selecionar uma categoria deixa só ela
+ *                      true:  a dimensão é excluída da própria máscara,
+ *                             e os números dela não mudam ao selecionar
+ *                             dentro dela
  *
- *  A linha de evolução ganhou uma coisa que o padrão de mercado não tem: o
- *  botão "ver os N meses" no cabeçalho. Com um ponto só na tela não existe
- *  vizinho para clicar e voltar, então sem esse botão a única saída seria o
- *  ✕ do chip, longe de onde a pessoa está olhando.
+ *  Para mudar o padrão de fábrica, troque `MODO_PADRAO`. Para acrescentar
+ *  um terceiro modo, basta uma entrada em MODOS — o botão aparece sozinho.
  */
-const ZOOM = {
+const BASE_ZOOM = {
   ligado: true,
-  contexto: 0,              // meses visíveis de cada lado do escolhido
-  escala: true,             // o eixo Y também reenquadra no que está visível
-  barras: true,             // barra/coluna reescala ignorando o que saiu
-  ocultarExcluidos: true,   // o excluído some da tela
-  pularPropria: false,      // a dimensão se filtra a si mesma
-  ms: 420,                  // duração da aproximação
+  escala: true,     // o eixo Y também reenquadra no que está visível
+  barras: true,     // barra/coluna reescala ignorando o que saiu
+  ms: 420,          // duração da aproximação
 };
+
+const MODOS = {
+  foco: {
+    rotulo: 'Foco',
+    titulo: 'Ao selecionar, mostra só o que foi escolhido',
+    contexto: 0,
+    ocultarExcluidos: true,
+    pularPropria: false,
+    dica: '<strong>Clique em qualquer número para filtrar.</strong> No modo '
+        + '<b>Foco</b>, o gráfico fica só com o que você escolheu. Clique de novo '
+        + 'para desfazer, ou mude para <b>Comparar</b> ali em cima para ver o '
+        + 'escolhido ao lado do resto.',
+  },
+  comparar: {
+    rotulo: 'Comparar',
+    titulo: 'Ao selecionar, mantém o resto na tela em cinza',
+    contexto: 3,
+    ocultarExcluidos: false,
+    pularPropria: true,
+    dica: '<strong>Clique em qualquer número para filtrar.</strong> No modo '
+        + '<b>Comparar</b>, nada some: o que fica <span class="amostra-cinza">cinza</span> '
+        + 'existe na base mas não sobrevive à seleção atual. Clique de novo para desfazer.',
+  },
+};
+
+const MODO_PADRAO = 'foco';
+const CHAVE_MODO = 'bi.modo';
+
+let modo = MODO_PADRAO;
+let ZOOM = { ...BASE_ZOOM, ...MODOS[MODO_PADRAO] };
+
+/*  A escolha fica no navegador da pessoa.
+ *
+ *  Não vai para o servidor: isso é preferência de leitura, não dado de
+ *  negócio, e mandar para o servidor exigiria tabela de preferência,
+ *  rota e migração para resolver uma coisa que o navegador resolve em
+ *  três linhas. Fica registrado como dívida: num produto vendido, a
+ *  preferência deveria seguir a PESSOA, não a máquina — quem abre do
+ *  celular hoje recebe o padrão de fábrica.
+ *
+ *  Todo acesso em try/catch: em janela anônima, com dados do site
+ *  bloqueados ou em alguns modos corporativos, o localStorage LANÇA em
+ *  vez de devolver vazio, e um painel não pode deixar de abrir por causa
+ *  de uma preferência de botão. */
+function modoGuardado() {
+  try {
+    const m = localStorage.getItem(CHAVE_MODO);
+    return MODOS[m] ? m : MODO_PADRAO;
+  } catch { return MODO_PADRAO; }
+}
+
+function aplicarModo(novo, guardar = true) {
+  if (!MODOS[novo]) return;
+  modo = novo;
+  ZOOM = { ...BASE_ZOOM, ...MODOS[novo] };
+  //  A câmera do gráfico de evolução perde a referência: os dois modos
+  //  enquadram janelas diferentes, e interpolar de uma para a outra
+  //  produziria um movimento sem significado.
+  zoomAtual = null; faixaAtual = null;
+  if (guardar) { try { localStorage.setItem(CHAVE_MODO, novo); } catch { /* sem persistência, segue */ } }
+  document.querySelectorAll('[data-modo]').forEach((b) => {
+    b.setAttribute('aria-pressed', String(b.dataset.modo === novo));
+    b.classList.toggle('ativo', b.dataset.modo === novo);
+  });
+  const dica = $('dica');
+  if (dica) dica.innerHTML = MODOS[novo].dica;
+}
 
 //: Quem pediu menos movimento no sistema operacional não recebe animação.
 //: Não é enfeite de acessibilidade: movimento involuntário dispara enjoo e
@@ -855,6 +920,12 @@ function ligarEventos() {
       render();
       return;
     }
+    const md = e.target.closest('[data-modo]');
+    if (md) {
+      aplicarModo(md.dataset.modo);
+      render();
+      return;
+    }
     const med = e.target.closest('[data-medida]');
     if (med) {
       medida = med.dataset.medida;
@@ -874,6 +945,12 @@ export async function iniciar() {
   const t0 = performance.now();
   M = await Motor.carregar('/cubo');
   const ms = performance.now() - t0;
+
+  //  Os botões saem do próprio MODOS: acrescentar um terceiro modo lá em
+  //  cima faz o botão aparecer aqui sem tocar nesta linha.
+  $('modos').innerHTML = Object.entries(MODOS).map(([k, m]) =>
+    `<button type="button" data-modo="${k}" title="${esc(m.titulo)}" aria-pressed="false">${esc(m.rotulo)}</button>`).join('');
+  aplicarModo(modoGuardado(), false);
 
   $('periodos').innerHTML = PERIODOS.map(([k, rot]) =>
     `<button type="button" data-periodo="${k}" aria-pressed="${k === periodo}">${rot}</button>`).join('');
