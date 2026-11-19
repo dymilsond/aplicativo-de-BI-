@@ -284,8 +284,13 @@ export class Motor {
    *  `estado: 'excluido'` e valor zero, para a tela poder acinzentar em vez
    *  de sumir — é assim que o usuário descobre o que existe na base.
    */
-  estado(dim, medida) {
-    const valores = this.porDimensao(dim, medida || this.cab.medidas[0].nome, true);
+  estado(dim, medida, pularPropria = true) {
+    //  `pularPropria` = o "skip". Com ele ligado (padrão), a dimensão é
+    //  excluída da própria máscara: selecionar dentro dela não muda os
+    //  números dela. Desligado, a dimensão se filtra a si mesma e sobra só
+    //  o selecionado — que é o comportamento de uma ferramenta de BI
+    //  comum. Quem decide é a tela, não o motor.
+    const valores = this.porDimensao(dim, medida || this.cab.medidas[0].nome, pularPropria);
     const sel = this.sel[dim];
     return this.rotulos[dim].map((rotulo, codigo) => ({
       codigo,

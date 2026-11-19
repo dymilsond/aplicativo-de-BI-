@@ -43,28 +43,40 @@ const ROTULO_DIM = {
 /* ZOOM — o que acontece com o gráfico quando você seleciona            */
 /* ------------------------------------------------------------------ */
 /*
- *  No Qlik, selecionar um mês não dá zoom: dá FILTRO. Os outros meses
- *  deixam de existir e sobra um ponto solto no branco. Quem clicou em
- *  Mai/2026 clicou justamente para comparar Mai/2026 com o resto — e
- *  recebeu a destruição do contexto que motivou o clique.
+ *  Padrão: a marca selecionada fica sozinha, ocupando o gráfico inteiro,
+ *  com a escala reajustada a ela. As outras saem. É o comportamento de uma
+ *  ferramenta de BI comum, e foi o pedido — decisão do Eddy, registrada
+ *  aqui porque o bloco todo existe para ser mudado sem mexer em mais nada.
  *
- *  Aqui a câmera se aproxima e a cena continua lá. `contexto` diz quantos
- *  meses ficam visíveis de cada lado do escolhido:
+ *  O que cada chave faz:
  *
- *      contexto: 3   → mês escolhido ± 3 meses (padrão)
- *      contexto: 1   → zoom fechado, ainda com vizinho para comparar
- *      contexto: 0   → só o mês escolhido — comportamento do Qlik
- *      ligado: false → desliga o zoom, a linha nunca se move
+ *    contexto: 0   só a marca escolhida (PADRÃO)
+ *    contexto: 1   escolhida ± 1 mês, ainda com vizinho para comparar
+ *    contexto: 3   escolhida ± 3 meses
  *
- *  Mude aqui e recarregue a página. Nenhuma outra linha precisa mudar.
+ *    ocultarExcluidos: true   o que saiu da seleção some da tela (PADRÃO)
+ *                      false  fica cinza, mostrando o que existe na base
+ *
+ *    pularPropria: false  a dimensão se filtra a si mesma, então selecionar
+ *                         uma categoria deixa só ela no gráfico (PADRÃO)
+ *                  true   a dimensão é excluída da própria máscara: os
+ *                         números dela não mudam ao selecionar dentro dela
+ *
+ *    ligado: false  desliga tudo, nada se move na seleção
+ *
+ *  A linha de evolução ganhou uma coisa que o padrão de mercado não tem: o
+ *  botão "ver os N meses" no cabeçalho. Com um ponto só na tela não existe
+ *  vizinho para clicar e voltar, então sem esse botão a única saída seria o
+ *  ✕ do chip, longe de onde a pessoa está olhando.
  */
 const ZOOM = {
   ligado: true,
-  contexto: 3,          // meses visíveis de cada lado do escolhido
-  escala: true,         // o eixo Y também reenquadra no que está visível
-  barras: true,         // barra/coluna reescala ignorando o que está excluído
-  ocultarExcluidos: false,  // true = o excluído some (Qlik); false = fica cinza
-  ms: 420,              // duração da aproximação
+  contexto: 0,              // meses visíveis de cada lado do escolhido
+  escala: true,             // o eixo Y também reenquadra no que está visível
+  barras: true,             // barra/coluna reescala ignorando o que saiu
+  ocultarExcluidos: true,   // o excluído some da tela
+  pularPropria: false,      // a dimensão se filtra a si mesma
+  ms: 420,                  // duração da aproximação
 };
 
 //: Quem pediu menos movimento no sistema operacional não recebe animação.
@@ -126,12 +138,16 @@ function porDim(dim, excluindoPropria) {
 
 /** `estado` ciente de medida derivada, preservando o tri-estado. */
 function estadoDim(dim) {
+  //  Com `pularPropria: false` a dimensão se filtra a si mesma — é o que
+  //  faz a barra selecionada ficar sozinha, como numa ferramenta de BI
+  //  comum. O motor aceita os dois, a tela escolhe.
+  const pular = !ZOOM.ligado || ZOOM.pularPropria;
   const def = MEDIDAS[medida];
-  if (!def.derivada) return M.estado(dim, medida);
-  const valores = porDim(dim, true);
+  if (!def.derivada) return M.estado(dim, medida, pular);
+  const valores = porDim(dim, pular);
   // O que é "possível" não depende da medida — depende de haver linha viva.
   // Uso a receita para decidir existência e a margem só para o valor.
-  const base = M.estado(dim, 'receita');
+  const base = M.estado(dim, 'receita', pular);
   return base.map((x) => ({ ...x, valor: valores[x.codigo] }));
 }
 let periodo = 'tudo';
@@ -226,13 +242,17 @@ function desenharBarras(id, dim, opcoes = {}) {
   //  O zoom da barra é o reenquadramento da escala. Antes, o maior valor
   //  incluía o que a seleção excluiu — e aí selecionar deixava todas as
   //  barras minúsculas, espremidas contra um máximo que não existe mais.
-  const base = (ZOOM.ligado && ZOOM.barras && temSel)
+  const base = (ZOOM.ligado && ZOOM.barras)
     ? itens.filter((x) => x.estado !== 'excluido')
     : itens;
 
-  //  `ocultarExcluidos: true` reproduz o Qlik: o que saiu da seleção some.
-  //  O padrão é falso — o cinza ensina a estrutura da própria base.
-  const visiveis = (ZOOM.ligado && ZOOM.ocultarExcluidos && temSel)
+  //  O que saiu da seleção some da tela.
+  //
+  //  A condição é "existe algum excluído", não "existe seleção NESTA
+  //  dimensão". Selecionar uma categoria exclui produtos de outras
+  //  categorias, e esses produtos têm que sumir do gráfico de produto
+  //  também — senão a regra valeria só para o objeto em que se clicou.
+  const visiveis = (ZOOM.ligado && ZOOM.ocultarExcluidos)
     ? itens.filter((x) => x.estado !== 'excluido')
     : itens;
 
@@ -277,7 +297,21 @@ function desenharRosca(id, dim) {
   const vivos = itens.filter((x) => x.valor > 0);
   const total = vivos.reduce((s, x) => s + x.valor, 0);
   const temSel = itens.some((x) => x.estado === 'selecionado');
-  const valSel = itens.filter((x) => x.estado === 'selecionado').reduce((s, x) => s + x.valor, 0);
+
+  /*  O denominador do percentual é calculado SEMPRE com a própria dimensão
+   *  pulada, mesmo quando o desenho não pula.
+   *
+   *  Sem isso, com a fatia selecionada sozinha no prato, numerador e
+   *  denominador viram o mesmo número e o centro escreve "100%". A conta
+   *  estaria certa e a resposta seria inútil: quem clicou perguntou "quanto
+   *  esta fatia é do total?" e receberia "esta fatia é tudo que sobrou".
+   *
+   *  Então o desenho obedece ao ZOOM (fatia sozinha, como pedido) e o
+   *  número obedece à pergunta (28,5% de R$ 375 mil). São duas coisas
+   *  diferentes e não precisam concordar. */
+  const base = porDim(dim, true);
+  const totalBase = base.reduce((s, v) => s + v, 0);
+  const valSel = [...M.sel[dim]].reduce((s, c) => s + base[c], 0);
   const R = 58, C = 2 * Math.PI * R;
   let off = 0, arcos = '';
 
@@ -298,7 +332,7 @@ function desenharRosca(id, dim) {
       cx="80" cy="80" r="${R}" fill="none" stroke="${cor}" stroke-width="${sel ? 28 : 22}"
       stroke-dasharray="${comp.toFixed(2)} ${(C - comp).toFixed(2)}" stroke-dashoffset="${-off.toFixed(2)}"
       transform="rotate(-90 80 80)" opacity="${temSel && !sel ? 0.3 : 1}">
-      <title>${esc(x.rotulo)}: ${valorDaMedida(x.valor)} (${pct(x.valor, total)})</title></circle></g>`;
+      <title>${esc(x.rotulo)}: ${valorDaMedida(base[x.codigo])} (${pct(base[x.codigo], totalBase)})</title></circle></g>`;
     off += comp;
     x.cor = cor;
   });
@@ -307,7 +341,7 @@ function desenharRosca(id, dim) {
     <button type="button" class="leg ${x.estado}" data-dim="${esc(dim)}" data-cod="${x.codigo}">
       <i style="background:${x.cor || '#cbd5e1'}"></i>
       <span>${esc(x.rotulo)}</span>
-      <b>${x.estado === 'excluido' ? '—' : pct(x.valor, total)}</b>
+      <b>${pct(base[x.codigo], totalBase)}</b>
     </button>`).join('');
 
   /*  O centro responde a pergunta que a seleção realmente faz.
@@ -322,8 +356,8 @@ function desenharRosca(id, dim) {
    *  da própria máscara), então o percentual da legenda nunca vira 100%.
    *  O centro fecha o raciocínio: mostra o valor selecionado e, embaixo,
    *  contra o que ele está sendo comparado. */
-  const centroNum = temSel ? valorDaMedida(valSel) : valorDaMedida(total);
-  const centroSub = temSel ? `${pct(valSel, total)} de ${valorDaMedida(total)}` : 'no filtro';
+  const centroNum = temSel ? valorDaMedida(valSel) : valorDaMedida(totalBase);
+  const centroSub = temSel ? `${pct(valSel, totalBase)} de ${valorDaMedida(totalBase)}` : 'no filtro';
 
   $(id).innerHTML = `<div class="rosca-wrap">
     <svg viewBox="0 0 160 160" role="img" aria-label="${esc(ROTULO_DIM[dim])}">
@@ -399,8 +433,13 @@ function faixaDe(jan) {
   const usa = dentro.length ? dentro : evoPontos;
   const max = Math.max(1, ...usa.map((x) => x.valor));
 
+  //  Cortar a base exige PELO MENOS DOIS pontos na janela. Com um só não
+  //  há variação para enquadrar: a faixa vira 8% do valor, e os cinco
+  //  rótulos do eixo saem todos iguais ("R$ 1,2 mi" cinco vezes, visto na
+  //  tela). Com um ponto, o eixo volta a começar em zero — que também é o
+  //  que uma ferramenta de BI comum mostra nesse caso.
   const aproximando = ZOOM.ligado && ZOOM.escala && !!mesEscolhido
-                   && dentro.length > 0 && dentro.length < evoPontos.length;
+                   && dentro.length >= 2 && dentro.length < evoPontos.length;
 
   if (!aproximando) {
     const passo = Math.pow(10, Math.floor(Math.log10(max)));
@@ -529,6 +568,20 @@ function pintarEvolucao(jan, fx) {
     return ['middle', x];
   };
 
+  /*  Quais pontos entram no desenho.
+   *
+   *  Com a janela de um mês só o vão é ZERO, então X(i) devolve o centro
+   *  para TODO índice — e os 25 pontos empilham numa linha vertical no meio
+   *  da tela. Foi o que apareceu na verificação. Nesse caso desenha-se só o
+   *  ponto escolhido: um ponto não tem linha nem área.
+   *
+   *  Com mais de um, entra também um vizinho de cada lado, para a linha
+   *  continuar saindo pelas bordas em vez de terminar no ar. O recorte do
+   *  SVG corta o excedente. */
+  const soUm = vao < 0.001;
+  const dePt = soUm ? Math.round(jan.ini) : Math.max(0, Math.floor(jan.ini) - 1);
+  const atePt = soUm ? Math.round(jan.ini) : Math.min(pontos.length - 1, Math.ceil(jan.fim) + 1);
+
   let g = '';
   for (let k = 0; k <= 4; k++) {
     const v = piso + amp * k / 4;
@@ -550,9 +603,15 @@ function pintarEvolucao(jan, fx) {
 
   //  Tudo que é série entra no recorte: fora da janela a linha continua
   //  existindo (é o que torna o movimento legível) mas não invade os eixos.
-  const linha = pontos.map((p, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(p.valor).toFixed(1)).join(' ');
-  let serie = `<path d="${linha} L${X(pontos.length - 1).toFixed(1)} ${Y(piso).toFixed(1)} L${X(0).toFixed(1)} ${Y(piso).toFixed(1)} Z" class="area"/>`;
-  serie += `<path d="${linha}" class="linha"/>`;
+  let serie = '';
+  if (!soUm) {
+    let d = '';
+    for (let i = dePt; i <= atePt; i++) {
+      d += (i === dePt ? 'M' : ' L') + X(i).toFixed(1) + ' ' + Y(pontos[i].valor).toFixed(1);
+    }
+    serie += `<path d="${d} L${X(atePt).toFixed(1)} ${Y(piso).toFixed(1)} L${X(dePt).toFixed(1)} ${Y(piso).toFixed(1)} Z" class="area"/>`;
+    serie += `<path d="${d}" class="linha"/>`;
+  }
 
   const dentro = (i) => i >= jan.ini - 0.5 && i <= jan.fim + 0.5;
   const visiveis = pontos.filter((_, i) => dentro(i)).length;
@@ -596,7 +655,8 @@ function pintarEvolucao(jan, fx) {
 
   const pular = visiveis > 16 ? Math.ceil(visiveis / 14) : 1;
   let k = 0;
-  pontos.forEach((p, i) => {
+  for (let i = dePt; i <= atePt; i++) {
+    const p = pontos[i];
     const sel = !!mesEscolhido && mesEscolhido.ano === p.ano && mesEscolhido.mes === p.mes;
     const x = X(i), y = Y(p.valor);
     const visivel = dentro(i);
@@ -615,9 +675,9 @@ function pintarEvolucao(jan, fx) {
     if (visivel) {
       serie += `<circle class="alvo" data-ano="${p.ano}" data-mes="${p.mes}" data-rot="${p.rotulo}"
             cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="14" fill="transparent">
-            <title>${p.rotulo}: ${MEDIDAS[medida].dinheiro ? brl(p.valor) : num(p.valor, 0)} — ${mesEscolhido && mesEscolhido.ano === p.ano && mesEscolhido.mes === p.mes ? 'clique para voltar ao histórico' : 'clique para aproximar neste mês'}</title></circle>`;
+            <title>${p.rotulo}: ${MEDIDAS[medida].dinheiro ? brl(p.valor) : num(p.valor, 0)} — ${sel ? 'clique para voltar ao histórico' : 'clique para aproximar neste mês'}</title></circle>`;
     }
-  });
+  }
 
   $('evolucao').innerHTML = `<svg viewBox="0 0 ${L} ${A}" role="img" aria-label="Evolução mensal">
     <defs><clipPath id="corte-evo"><rect x="${ml}" y="0" width="${larg}" height="${A}"/></clipPath></defs>
@@ -644,12 +704,15 @@ function pintarEvolucao(jan, fx) {
 function desenharHoras() {
   const itens = estadoDim('hora').sort((a, b) => Number(a.rotulo) - Number(b.rotulo));
   const temSel = itens.some((x) => x.estado === 'selecionado');
-  const base = (ZOOM.ligado && ZOOM.barras && temSel)
+  const base = (ZOOM.ligado && ZOOM.barras)
     ? itens.filter((x) => x.estado !== 'excluido')
     : itens;
   const max = Math.max(1, ...(base.length ? base : itens).map((x) => x.valor));
+  const mostra = (ZOOM.ligado && ZOOM.ocultarExcluidos)
+    ? itens.filter((x) => x.estado !== 'excluido')
+    : itens;
 
-  $('horas').innerHTML = `<div class="colunas-hora">` + itens.map((x) => {
+  $('horas').innerHTML = `<div class="colunas-hora">` + mostra.map((x) => {
     const pc = Math.min(100, 100 * x.valor / max).toFixed(1) + '%';
     const saida = tamanhoDeSaida(`hora:${x.codigo}`, pc);
     return `
@@ -669,12 +732,15 @@ function desenharSemana() {
   const itens = estadoDim('dia_semana')
     .sort((a, b) => ORDEM_SEMANA.indexOf(a.rotulo) - ORDEM_SEMANA.indexOf(b.rotulo));
   const temSel = itens.some((x) => x.estado === 'selecionado');
-  const base = (ZOOM.ligado && ZOOM.barras && temSel)
+  const base = (ZOOM.ligado && ZOOM.barras)
     ? itens.filter((x) => x.estado !== 'excluido')
     : itens;
   const max = Math.max(1, ...(base.length ? base : itens).map((x) => x.valor));
+  const mostra = (ZOOM.ligado && ZOOM.ocultarExcluidos)
+    ? itens.filter((x) => x.estado !== 'excluido')
+    : itens;
 
-  $('semana').innerHTML = itens.map((x) => {
+  $('semana').innerHTML = mostra.map((x) => {
     const pc = Math.min(100, 100 * x.valor / max).toFixed(1) + '%';
     const saida = tamanhoDeSaida(`dia_semana:${x.codigo}`, pc);
     return `
@@ -694,9 +760,10 @@ function desenharSemana() {
 /* ------------------------------------------------------------------ */
 
 function desenharTabela() {
-  const receita = M.porDimensao('produto', 'receita', true);
-  const custo = M.porDimensao('produto', 'custo', true);
-  const qtd = M.porDimensao('produto', 'quantidade', true);
+  const pular = !ZOOM.ligado || ZOOM.pularPropria;
+  const receita = M.porDimensao('produto', 'receita', pular);
+  const custo = M.porDimensao('produto', 'custo', pular);
+  const qtd = M.porDimensao('produto', 'quantidade', pular);
   const sel = M.sel.produto;
 
   const linhas = M.rotulos.produto.map((rotulo, codigo) => ({
@@ -715,7 +782,11 @@ function desenharTabela() {
     (ZOOM.ligado ? (b.estado === 'selecionado') - (a.estado === 'selecionado') : 0)
     || b.receita - a.receita);
 
-  $('tabela').innerHTML = linhas.map((l) => `
+  const visiveis = (ZOOM.ligado && ZOOM.ocultarExcluidos)
+    ? linhas.filter((l) => l.estado !== 'excluido')
+    : linhas;
+
+  $('tabela').innerHTML = visiveis.map((l) => `
     <tr class="${l.estado}" data-dim="produto" data-cod="${l.codigo}">
       <td>${esc(l.rotulo)}</td>
       <td class="n">${l.estado === 'excluido' ? '—' : num(l.qtd, 0)}</td>
