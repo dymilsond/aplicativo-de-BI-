@@ -1,0 +1,17 @@
+# O que NÃO vai para dentro da imagem.
+#
+# Sem este arquivo, o `docker build` empacota a pasta inteira — inclusive a
+# venv (centenas de MB de binários de Linux ou de Windows, inúteis dentro do
+# container) e os cubos. A imagem incharia e o build ficaria lento à toa.
+venv/
+__pycache__/
+*.py[cod]
+.git/
+.gitignore
+
+# Dados do cliente entram por volume, nunca pela imagem.
+dados/
+
+# Testes e documentação não são necessários para rodar.
+testes/
+LEIAME.md

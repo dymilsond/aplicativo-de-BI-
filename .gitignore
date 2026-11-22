@@ -3,7 +3,6 @@ __pycache__/
 *.py[cod]
 dados/*.duckdb
 dados/*.wal
-dados/cubo/
 
-# pasta de trabalho criada pela aplicacao na subida
-dados/
+# segredo local, nunca versionado
+.env

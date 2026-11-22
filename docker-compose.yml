@@ -1,0 +1,35 @@
+# Como subir o painel com um comando só.
+#
+#   docker compose up -d --build     sobe
+#   docker compose logs -f           acompanha o log
+#   docker compose down              desliga
+#
+services:
+  painel:
+    build: .
+    container_name: painel-bi
+    restart: unless-stopped
+
+    ports:
+      # Esquerda: porta da sua máquina. Direita: porta dentro da caixa.
+      # Para usar outra porta, mude SÓ o número da esquerda.
+      - "8080:8080"
+
+    environment:
+      # ESTA VARIÁVEL É OBRIGATÓRIA EM PRODUÇÃO.
+      #
+      # Sem ela, o código gera uma chave aleatória na subida — e aí TODO
+      # restart desconecta todo mundo que estava logado, porque os cookies
+      # assinados com a chave antiga deixam de valer.
+      #
+      # Gere a sua uma vez e guarde:
+      #   python -c "import secrets; print(secrets.token_urlsafe(32))"
+      CHAVE_DA_SESSAO: ${CHAVE_DA_SESSAO:?defina CHAVE_DA_SESSAO no arquivo .env}
+
+    volumes:
+      # Os dados ficam na SUA pasta, não dentro do container.
+      #
+      # Container é descartável: você vai destruir e recriar a cada
+      # atualização. Se os cubos estivessem dentro dele, sumiriam junto.
+      # Aqui eles vivem em ./dados na máquina e sobrevivem a tudo.
+      - ./dados:/app/dados
